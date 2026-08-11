@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Supermarket POS</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div class="app">
+<h1 id="appStoreName">🛒 My Supermarket POS</h1>
+<p class="subtitle">Product, Sales & Inventory Management</p>
+
+<div class="dashboard">
+<div class="card"><span>Total Products</span><strong id="productCount">0</strong></div>
+<div class="card"><span>Today's Sales</span><strong id="salesTotal">₦0</strong></div>
+<div class="card"><span>Low Stock</span><strong id="lowStock">0</strong></div>
+</div>
+
+<div class="section">
+<h2>⚙️ Store Settings</h2>
+<p class="muted">Customize the information that appears on your store and receipts.</p>
+<input id="storeName" type="text" placeholder="Store name e.g. Ayo Supermarket">
+<input id="ownerName" type="text" placeholder="Owner / Business name">
+<input id="storePhone" type="tel" placeholder="Store phone number">
+<input id="storeAddress" type="text" placeholder="Store address">
+<button id="saveStoreButton">💾 Save Store Information</button>
+<div id="storeSaveMessage"></div>
+</div>
+
+<div class="section">
+<h2>➕ Add Product</h2>
+<input id="productName" type="text" placeholder="Product name">
+<input id="productRetailPrice" type="number" placeholder="Retail selling price (₦)">
+<input id="productWholesalePrice" type="number" placeholder="Wholesale selling price (₦)">
+<input id="productStock" type="number" placeholder="Quantity">
+<button id="addProductButton">Add Product</button>
+</div>
+
+<div class="section"><h2>📦 Products</h2><div id="productList"></div></div>
+
+<div class="section">
+<h2>🛒 New Sale</h2>
+<input id="productSearch" type="text" placeholder="🔎 Type product name to find it...">
+<select id="saleType"><option value="retail">Retail Sale</option><option value="wholesale">Wholesale Sale</option></select>
+<div id="saleProducts"></div>
+<h3>🧾 Customer Cart</h3>
+<div id="cart"></div>
+<h2>Total: <span id="cartTotal">₦0</span></h2>
+<input id="customerName" type="text" placeholder="Customer name">
+<input id="customerPhone" type="tel" placeholder="Customer phone number">
+<label for="amountPaid">Amount Paid (₦)</label>
+<input id="amountPaid" type="number" placeholder="Enter amount customer paid">
+<div id="changeDisplay"></div>
+<button id="completeSaleButton">Complete Sale</button>
+<div id="receipt" class="receipt"></div>
+</div>
+
+<div class="section">
+<h2>👥 Customer History</h2>
+<input id="customerSearch" type="text" placeholder="Search customer name or phone...">
+<div id="customerHistory"><p class="muted">Search for a customer to see their purchase history.</p></div>
+</div>
+
+<div class="section">
+<h2>📊 Sales History</h2>
+<div id="salesHistory"><p class="muted">No sales yet.</p></div>
+</div>
+</div>
+<script src="./script.js"></script>
+</body>
+</html>

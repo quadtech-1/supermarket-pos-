@@ -1,0 +1,29 @@
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f4f6f8;color:#17202a;font-size:18px}
+.app{max-width:1200px;margin:auto;padding:25px}
+h1{font-size:36px;margin-bottom:5px}h2{font-size:28px}h3{font-size:22px}
+.subtitle,.muted{color:#667085;font-size:18px}
+.dashboard{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:25px 0 30px}
+.card{background:white;padding:28px 15px;min-height:160px;border-radius:18px;box-shadow:0 4px 14px rgba(0,0,0,.10);display:flex;flex-direction:column;justify-content:center;text-align:center}
+.card span{color:#667085;font-size:19px;font-weight:600}.card strong{font-size:42px;margin-top:15px;font-weight:800}
+.section{background:white;padding:28px;margin-bottom:22px;border-radius:16px;box-shadow:0 3px 12px rgba(0,0,0,.08)}
+input,select{width:100%;padding:16px;margin:7px 0;border:1px solid #d0d5dd;border-radius:10px;font-size:18px;background:white}
+input:focus,select:focus{outline:2px solid #111827}
+label{display:block;margin-top:15px;margin-bottom:5px;font-weight:600}
+button{width:100%;padding:16px;margin-top:8px;border:none;border-radius:10px;background:#111827;color:white;font-size:18px;font-weight:bold;cursor:pointer}
+button:active{transform:scale(.99)}
+#storeSaveMessage{margin-top:12px;font-weight:bold}
+#saleProducts .product,#cart .product{padding:18px;margin-bottom:12px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa;font-size:17px}
+#saleProducts button{padding:16px;font-size:18px;font-weight:bold;margin-top:12px}
+#cart button{width:30%;padding:12px;font-size:16px;margin-right:2%}
+#changeDisplay{margin:15px 0;font-size:19px}
+.product{padding:14px 0;border-bottom:1px solid #eee}.product:last-child{border-bottom:none}
+.receipt{display:none;width:100%;max-width:380px;margin:25px auto;padding:24px;background:#fff;border:1px dashed #555;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,.08);font-size:16px}
+.receipt h2{font-size:24px;text-align:center;margin-bottom:5px}.receipt p{text-align:center}
+.receipt hr{border:none;border-top:1px dashed #999;margin:15px 0}
+.receipt-line{display:flex;justify-content:space-between;gap:15px;margin:10px 0}
+.receipt-total{border-top:1px dashed #777;padding-top:12px;margin-top:15px;font-weight:bold}
+.receipt button{margin-top:18px;font-size:17px;padding:15px}
+.sale-record{padding:14px 0;border-bottom:1px solid #eee}.sale-record:last-child{border-bottom:none}
+.sale-items{color:#667085;font-size:16px;line-height:1.5}.sale-total{font-weight:bold;margin-top:8px}
+@media(max-width:600px){.app{padding:15px}h1{font-size:30px}h2{font-size:24px}.dashboard{grid-template-columns:1fr}.card{min-height:130px}}
