@@ -1,16 +1,18 @@
 /* =========================================================
-   MY STORE POS — V2 SCRIPT
-   ========================================================= */
+   MY STORE POS — V2
+   Main application logic
+========================================================= */
 
 "use strict";
 
 /* =========================================================
-   STORAGE KEYS
-   ========================================================= */
+   STORAGE
+========================================================= */
 
 const STORAGE = {
   products: "posProducts",
   sales: "posSales",
+  customers: "posCustomers",
   expenses: "posExpenses",
   settings: "posStoreSettings"
 };
@@ -18,11 +20,13 @@ const STORAGE = {
 
 /* =========================================================
    DEFAULT DATA
-   ========================================================= */
+========================================================= */
 
 let products = [];
 let sales = [];
+let customers = [];
 let expenses = [];
+
 let cart = [];
 
 let storeSettings = {
@@ -38,26 +42,24 @@ let storeSettings = {
 
 
 /* =========================================================
-   LOAD DATA SAFELY
-   ========================================================= */
+   LOAD STORAGE SAFELY
+========================================================= */
 
 function loadJSON(key, fallback) {
 
   try {
 
-    const data = localStorage.getItem(key);
+    const saved = localStorage.getItem(key);
 
-    return data
-      ? JSON.parse(data)
-      : fallback;
+    if (!saved) {
+      return fallback;
+    }
+
+    return JSON.parse(saved);
 
   } catch (error) {
 
-    console.error(
-      "Could not load:",
-      key,
-      error
-    );
+    console.warn("Could not load:", key);
 
     return fallback;
   }
@@ -65,52 +67,71 @@ function loadJSON(key, fallback) {
 
 
 products =
-  loadJSON(
-    STORAGE.products,
-    []
-  );
+  loadJSON(STORAGE.products, []);
 
 sales =
-  loadJSON(
-    STORAGE.sales,
-    []
-  );
+  loadJSON(STORAGE.sales, []);
+
+customers =
+  loadJSON(STORAGE.customers, []);
 
 expenses =
-  loadJSON(
-    STORAGE.expenses,
-    []
-  );
+  loadJSON(STORAGE.expenses, []);
 
-storeSettings = {
-  ...storeSettings,
-  ...loadJSON(
-    STORAGE.settings,
-    {}
-  )
-};
+const savedSettings =
+  loadJSON(STORAGE.settings, null);
+
+if (savedSettings) {
+
+  storeSettings = {
+    ...storeSettings,
+    ...savedSettings
+  };
+
+}
 
 
 /* =========================================================
-   SAVE DATA
-   ========================================================= */
+   SAVE
+========================================================= */
 
-function saveData() {
+function saveProducts() {
 
   localStorage.setItem(
     STORAGE.products,
     JSON.stringify(products)
   );
 
+}
+
+
+function saveSales() {
+
   localStorage.setItem(
     STORAGE.sales,
     JSON.stringify(sales)
   );
 
+}
+
+
+function saveCustomers() {
+
+  localStorage.setItem(
+    STORAGE.customers,
+    JSON.stringify(customers)
+  );
+
+}
+
+
+function saveExpenses() {
+
   localStorage.setItem(
     STORAGE.expenses,
     JSON.stringify(expenses)
   );
+
 }
 
 
@@ -120,18 +141,19 @@ function saveSettings() {
     STORAGE.settings,
     JSON.stringify(storeSettings)
   );
+
 }
 
 
 /* =========================================================
    HELPERS
-   ========================================================= */
+========================================================= */
 
-function money(amount) {
+function money(value) {
 
   return (
     storeSettings.currency +
-    Number(amount || 0).toLocaleString()
+    Number(value || 0).toLocaleString()
   );
 
 }
@@ -145,6 +167,22 @@ function escapeHTML(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+
+}
+
+
+function generateID(prefix) {
+
+  return (
+    prefix +
+    "_" +
+    Date.now() +
+    "_" +
+    Math.random()
+      .toString(36)
+      .substring(2, 8)
+  );
+
 }
 
 
@@ -155,22 +193,53 @@ function todayString() {
 }
 
 
-function generateId() {
+function isToday(date) {
 
-  return Date.now() +
-    Math.floor(
-      Math.random() * 1000
+  return (
+    new Date(date).toDateString() ===
+    todayString()
+  );
+
+}
+
+
+function getProductCost(product) {
+
+  return Number(
+    product.costPrice ||
+    product.wholesalePrice ||
+    0
+  );
+
+}
+
+
+function getProductSellingPrice(product, type) {
+
+  if (type === "wholesale") {
+
+    return Number(
+      product.wholesalePrice ||
+      product.retailPrice ||
+      0
     );
+
+  }
+
+  return Number(
+    product.retailPrice ||
+    product.sellingPrice ||
+    0
+  );
 
 }
 
 
 /* =========================================================
-   NAVIGATION
-   ========================================================= */
+   PAGE NAVIGATION
+========================================================= */
 
-window.openPage =
-function(pageId, button) {
+window.openPage = function(pageId, clickedButton) {
 
   document
     .querySelectorAll(".page")
@@ -195,16 +264,16 @@ function(pageId, button) {
     .querySelectorAll(
       ".side-item, .mobile-nav-item"
     )
-    .forEach(function(item) {
+    .forEach(function(button) {
 
-      item.classList.remove("active");
+      button.classList.remove("active");
 
     });
 
 
-  if (button) {
+  if (clickedButton) {
 
-    button.classList.add("active");
+    clickedButton.classList.add("active");
 
   }
 
@@ -215,27 +284,23 @@ function(pageId, button) {
   });
 
 
-  refreshPage(pageId);
+  refreshCurrentPage(pageId);
 
 };
 
 
 /* =========================================================
    REFRESH PAGE
-   ========================================================= */
+========================================================= */
 
-function refreshPage(pageId) {
+function refreshCurrentPage(pageId) {
 
-  if (
-    pageId === "homePage" ||
-    pageId === "dashboardPage"
-  ) {
+  if (pageId === "homePage") {
 
     updateDashboard();
     renderRecentSales();
 
   }
-
 
   if (pageId === "posPage") {
 
@@ -244,13 +309,11 @@ function refreshPage(pageId) {
 
   }
 
-
   if (pageId === "inventoryPage") {
 
     renderInventory();
 
   }
-
 
   if (pageId === "customersPage") {
 
@@ -258,13 +321,11 @@ function refreshPage(pageId) {
 
   }
 
-
   if (pageId === "salesPage") {
 
-    renderSales();
+    renderSalesHistory();
 
   }
-
 
   if (pageId === "expensesPage") {
 
@@ -272,99 +333,253 @@ function refreshPage(pageId) {
 
   }
 
-
   if (pageId === "reportsPage") {
 
     renderReports();
 
   }
 
+}
 
-  if (pageId === "settingsPage") {
 
-    loadSettingsForm();
+/* =========================================================
+   STORE SETTINGS
+========================================================= */
+
+function updateStoreTitle() {
+
+  const title =
+    document.getElementById("appStoreName");
+
+  const letter =
+    document.getElementById("profileLetter");
+
+  const name =
+    storeSettings.storeName ||
+    "My Store";
+
+
+  if (title) {
+
+    title.textContent = name;
 
   }
 
-}
+
+  if (letter) {
+
+    letter.textContent =
+      name.charAt(0).toUpperCase();
+
+  }
 
 
-/* =========================================================
-   PRODUCT CATEGORIES
-   ========================================================= */
-
-function getCategories() {
-
-  const categories =
-    products
-      .map(function(product) {
-
-        return product.category;
-
-      })
-      .filter(Boolean);
-
-
-  return [
-    ...new Set(categories)
-  ];
+  document.title =
+    name + " POS";
 
 }
 
 
-/* =========================================================
-   ADD PRODUCT
-   ========================================================= */
+function loadStoreSettings() {
 
-window.addProduct =
-function() {
+  const fields = {
+
+    storeName:
+      document.getElementById("storeName"),
+
+    ownerName:
+      document.getElementById("ownerName"),
+
+    phone:
+      document.getElementById("storePhone"),
+
+    email:
+      document.getElementById("storeEmail"),
+
+    address:
+      document.getElementById("storeAddress"),
+
+    city:
+      document.getElementById("storeCity")
+
+  };
+
+
+  Object.keys(fields).forEach(function(key) {
+
+    if (fields[key]) {
+
+      fields[key].value =
+        storeSettings[key] || "";
+
+    }
+
+  });
+
+
+  updateStoreTitle();
+
+}
+
+
+function setupStoreSettings() {
+
+  const button =
+    document.getElementById(
+      "saveStoreButton"
+    );
+
+  if (!button) return;
+
+
+  button.addEventListener(
+    "click",
+    function() {
+
+      const storeName =
+        document
+          .getElementById("storeName")
+          ?.value
+          .trim();
+
+
+      if (!storeName) {
+
+        alert(
+          "Please enter a store name."
+        );
+
+        return;
+
+      }
+
+
+      storeSettings.storeName =
+        storeName;
+
+      storeSettings.ownerName =
+        document
+          .getElementById("ownerName")
+          ?.value
+          .trim() || "";
+
+      storeSettings.phone =
+        document
+          .getElementById("storePhone")
+          ?.value
+          .trim() || "";
+
+      storeSettings.email =
+        document
+          .getElementById("storeEmail")
+          ?.value
+          .trim() || "";
+
+      storeSettings.address =
+        document
+          .getElementById("storeAddress")
+          ?.value
+          .trim() || "";
+
+      storeSettings.city =
+        document
+          .getElementById("storeCity")
+          ?.value
+          .trim() || "";
+
+
+      saveSettings();
+
+      updateStoreTitle();
+
+
+      const message =
+        document.getElementById(
+          "storeSaveMessage"
+        );
+
+
+      if (message) {
+
+        message.textContent =
+          "Business information saved.";
+
+        setTimeout(function() {
+
+          message.textContent = "";
+
+        }, 3000);
+
+      }
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   PRODUCTS
+========================================================= */
+
+function addProduct() {
 
   const name =
-    getValue("productName");
+    document
+      .getElementById("productName")
+      ?.value
+      .trim();
+
 
   const cost =
     Number(
-      getValue("productCostPrice")
+      document
+        .getElementById("productCostPrice")
+        ?.value || 0
     );
+
 
   const retail =
     Number(
-      getValue("productRetailPrice")
+      document
+        .getElementById("productRetailPrice")
+        ?.value || 0
     );
+
 
   const wholesale =
     Number(
-      getValue("productWholesalePrice")
+      document
+        .getElementById("productWholesalePrice")
+        ?.value || 0
     );
+
 
   const stock =
     Number(
-      getValue("productStock")
+      document
+        .getElementById("productStock")
+        ?.value || 0
     );
 
+
   const category =
-    getValue("productCategory");
+    document
+      .getElementById("productCategory")
+      ?.value
+      .trim() || "General";
+
 
   const sku =
-    getValue("productSKU");
+    document
+      .getElementById("productSKU")
+      ?.value
+      .trim() || "";
 
 
   if (!name) {
 
-    alert(
-      "Please enter product name."
-    );
-
-    return;
-
-  }
-
-
-  if (cost < 0) {
-
-    alert(
-      "Please enter a valid cost price."
-    );
+    alert("Enter product name.");
 
     return;
 
@@ -373,72 +588,48 @@ function() {
 
   if (retail <= 0) {
 
-    alert(
-      "Please enter a valid selling price."
-    );
+    alert("Enter a valid selling price.");
 
     return;
 
   }
 
 
-  if (wholesale < 0) {
+  if (stock < 0) {
 
-    alert(
-      "Please enter a valid wholesale price."
-    );
+    alert("Stock cannot be negative.");
 
     return;
 
   }
 
 
-  if (
-    isNaN(stock) ||
-    stock < 0
-  ) {
+  products.push({
 
-    alert(
-      "Please enter valid stock quantity."
-    );
+    id: generateID("product"),
 
-    return;
-
-  }
-
-
-  const product = {
-
-    id: generateId(),
-
-    name: name,
-
-    sku:
-      sku ||
-      "SKU-" +
-      Date.now(),
-
-    category:
-      category ||
-      "General",
+    name,
 
     costPrice: cost,
 
     retailPrice: retail,
 
-    wholesalePrice: wholesale,
+    wholesalePrice:
+      wholesale || retail,
 
-    stock: stock,
+    stock,
+
+    category,
+
+    sku,
 
     createdAt:
       new Date().toISOString()
 
-  };
+  });
 
 
-  products.push(product);
-
-  saveData();
+  saveProducts();
 
   clearProductForm();
 
@@ -448,36 +639,33 @@ function() {
 
   updateDashboard();
 
-  alert(
-    "✅ Product added successfully."
-  );
 
-};
+  alert("Product added successfully.");
+
+}
 
 
-/* =========================================================
-   CLEAR PRODUCT FORM
-   ========================================================= */
+window.addProduct = addProduct;
+
 
 function clearProductForm() {
 
   [
     "productName",
-    "productSKU",
-    "productCategory",
     "productCostPrice",
     "productRetailPrice",
     "productWholesalePrice",
-    "productStock"
-  ]
-  .forEach(function(id) {
+    "productStock",
+    "productCategory",
+    "productSKU"
+  ].forEach(function(id) {
 
-    const element =
+    const field =
       document.getElementById(id);
 
-    if (element) {
+    if (field) {
 
-      element.value = "";
+      field.value = "";
 
     }
 
@@ -487,84 +675,69 @@ function clearProductForm() {
 
 
 /* =========================================================
-   DELETE PRODUCT
-   ========================================================= */
+   INVENTORY
+========================================================= */
 
-window.deleteProduct =
-function(id) {
+function renderInventory() {
 
-  const index =
-    products.findIndex(function(product) {
+  const box =
+    document.getElementById(
+      "productList"
+    );
 
-      return String(product.id) ===
-        String(id);
+
+  if (!box) return;
+
+
+  const search =
+    document
+      .getElementById("inventorySearch")
+      ?.value
+      .trim()
+      .toLowerCase() || "";
+
+
+  const filtered =
+    products.filter(function(product) {
+
+      return (
+
+        product.name
+          .toLowerCase()
+          .includes(search)
+
+        ||
+
+        String(product.sku || "")
+          .toLowerCase()
+          .includes(search)
+
+        ||
+
+        String(product.category || "")
+          .toLowerCase()
+          .includes(search)
+
+      );
 
     });
 
 
-  if (index === -1) return;
+  if (!filtered.length) {
 
-
-  const product =
-    products[index];
-
-
-  if (
-    !confirm(
-      `Delete "${product.name}"?`
-    )
-  ) {
+    box.innerHTML =
+      '<p class="empty">No products found.</p>';
 
     return;
 
   }
 
 
-  products.splice(
-    index,
-    1
-  );
-
-  saveData();
-
-  renderInventory();
-  renderPOSProducts();
-  updateDashboard();
-
-};
-
-
-/* =========================================================
-   INVENTORY
-   ========================================================= */
-
-function renderInventory() {
-
-  const container =
-    document.getElementById(
-      "inventoryList"
-    );
-
-  if (!container) return;
-
-
-  if (products.length === 0) {
-
-    container.innerHTML =
-      `<div class="empty">
-        No products added yet.
-      </div>`;
-
-    return;
-
-  }
-
-
-  container.innerHTML =
-    products.map(function(product) {
+  box.innerHTML =
+    filtered.map(function(product) {
 
       const stock =
-        Number(product.stock);
+        Number(product.stock || 0);
 
 
       let status =
@@ -592,25 +765,35 @@ function renderInventory() {
 
             <div>
 
-              <strong>
+              <div class="product-name">
+
                 ${escapeHTML(
                   product.name
                 )}
-              </strong>
+
+              </div>
 
               <small>
-                SKU:
+
                 ${escapeHTML(
-                  product.sku
+                  product.category ||
+                  "General"
                 )}
+
               </small>
 
-              <small>
-                Category:
-                ${escapeHTML(
-                  product.category
-                )}
-              </small>
+              ${
+                product.sku
+                  ? `
+                    <small>
+                      SKU:
+                      ${escapeHTML(
+                        product.sku
+                      )}
+                    </small>
+                  `
+                  : ""
+              }
 
             </div>
 
@@ -624,7 +807,9 @@ function renderInventory() {
           <div class="product-price">
 
             Cost:
-            ${money(product.costPrice)}
+            ${money(
+              getProductCost(product)
+            )}
 
           </div>
 
@@ -632,7 +817,9 @@ function renderInventory() {
           <div class="product-price">
 
             Retail:
-            ${money(product.retailPrice)}
+            ${money(
+              product.retailPrice
+            )}
 
           </div>
 
@@ -640,7 +827,9 @@ function renderInventory() {
           <div class="product-price">
 
             Wholesale:
-            ${money(product.wholesalePrice)}
+            ${money(
+              product.wholesalePrice
+            )}
 
           </div>
 
@@ -655,9 +844,7 @@ function renderInventory() {
           <button
             onclick="deleteProduct('${product.id}')"
           >
-
-            🗑️ Delete
-
+            Delete
           </button>
 
         </div>
@@ -669,30 +856,92 @@ function renderInventory() {
 }
 
 
+window.renderInventory =
+  renderInventory;
+
+
+window.deleteProduct =
+  function(id) {
+
+    const product =
+      products.find(function(item) {
+
+        return item.id === id;
+
+      });
+
+
+    if (!product) return;
+
+
+    if (
+      !confirm(
+        'Delete "' +
+        product.name +
+        '"?'
+      )
+    ) {
+
+      return;
+
+    }
+
+
+    products =
+      products.filter(function(item) {
+
+        return item.id !== id;
+
+      });
+
+
+    saveProducts();
+
+    renderInventory();
+
+    renderPOSProducts();
+
+    updateDashboard();
+
+  };
+
+
 /* =========================================================
    POS PRODUCTS
-   ========================================================= */
+========================================================= */
 
 function renderPOSProducts() {
 
-  const container =
+  const box =
     document.getElementById(
-      "posProducts"
+      "saleProducts"
+    ) ||
+    document.getElementById(
+      "homeSaleProducts"
     );
 
-  if (!container) return;
+
+  if (!box) return;
 
 
   const search =
-    getValue(
-      "productSearch"
-    ).toLowerCase();
+    document
+      .getElementById("productSearch")
+      ?.value
+      .trim()
+      .toLowerCase() || "";
 
 
   const category =
-    getValue(
-      "posCategory"
-    );
+    document
+      .getElementById("saleCategory")
+      ?.value || "all";
+
+
+  const type =
+    document
+      .getElementById("saleType")
+      ?.value || "retail";
 
 
   const filtered =
@@ -701,15 +950,10 @@ function renderPOSProducts() {
       const matchesSearch =
         product.name
           .toLowerCase()
-          .includes(search) ||
-
-        String(product.sku)
-          .toLowerCase()
           .includes(search);
 
 
       const matchesCategory =
-        !category ||
         category === "all" ||
         product.category === category;
 
@@ -722,20 +966,29 @@ function renderPOSProducts() {
     });
 
 
-  if (filtered.length === 0) {
+  if (!filtered.length) {
 
-    container.innerHTML =
-      `<div class="empty">
-        No products found.
-      </div>`;
+    box.innerHTML =
+      '<p class="empty">No products found.</p>';
 
     return;
 
   }
 
 
-  container.innerHTML =
+  box.innerHTML =
     filtered.map(function(product) {
+
+      const index =
+        products.indexOf(product);
+
+
+      const price =
+        getProductSellingPrice(
+          product,
+          type
+        );
+
 
       const disabled =
         Number(product.stock) <= 0
@@ -756,17 +1009,11 @@ function renderPOSProducts() {
             </strong>
 
             <small>
-              ${escapeHTML(
-                product.category
-              )}
-            </small>
 
-            <small>
-              ${money(
-                getSalePrice(product)
-              )}
+              ${money(price)}
               • Stock:
               ${product.stock}
+
             </small>
 
           </div>
@@ -774,7 +1021,7 @@ function renderPOSProducts() {
 
           <button
             class="add-button"
-            onclick="addToCart('${product.id}')"
+            onclick="addToCart(${index})"
             ${disabled}
           >
 
@@ -795,88 +1042,26 @@ function renderPOSProducts() {
 }
 
 
-/* =========================================================
-   SALE PRICE
-   ========================================================= */
+window.renderPOSProducts =
+  renderPOSProducts;
 
-function getSalePrice(product) {
-
-  const type =
-    getValue("saleType") ||
-    getValue("homeSaleType") ||
-    "retail";
-
-
-  if (type === "wholesale") {
-
-    return Number(
-      product.wholesalePrice
-    );
-
-  }
-
-
-  return Number(
-    product.retailPrice
-  );
-
-}
-
-
-/* =========================================================
-   ADD TO CART
-   ========================================================= */
 
 window.addToCart =
-function(productId) {
+  function(index) {
 
-  const product =
-    products.find(function(item) {
-
-      return String(item.id) ===
-        String(productId);
-
-    });
+    const product =
+      products[index];
 
 
-  if (!product) return;
+    if (!product) return;
 
-
-  if (
-    Number(product.stock) <= 0
-  ) {
-
-    alert(
-      "This product is out of stock."
-    );
-
-    return;
-
-  }
-
-
-  const price =
-    getSalePrice(product);
-
-
-  const existing =
-    cart.find(function(item) {
-
-      return String(item.productId) ===
-        String(product.id);
-
-    });
-
-
-  if (existing) {
 
     if (
-      existing.quantity >=
-      Number(product.stock)
+      Number(product.stock) <= 0
     ) {
 
       alert(
-        "Not enough stock."
+        "This product is out of stock."
       );
 
       return;
@@ -884,44 +1069,79 @@ function(productId) {
     }
 
 
-    existing.quantity++;
+    const type =
+      document
+        .getElementById("saleType")
+        ?.value || "retail";
 
-  } else {
 
-    cart.push({
+    const price =
+      getProductSellingPrice(
+        product,
+        type
+      );
 
-      productId:
-        product.id,
 
-      name:
-        product.name,
+    const existing =
+      cart.find(function(item) {
 
-      price:
+        return (
+          item.productId === product.id
+        );
+
+      });
+
+
+    if (existing) {
+
+      if (
+        existing.quantity >=
+        Number(product.stock)
+      ) {
+
+        alert("Not enough stock.");
+
+        return;
+
+      }
+
+
+      existing.quantity++;
+
+    } else {
+
+      cart.push({
+
+        productId:
+          product.id,
+
+        name:
+          product.name,
+
         price,
 
-      costPrice:
-        Number(
-          product.costPrice
-        ),
+        costPrice:
+          getProductCost(product),
 
-      quantity:
-        1
+        quantity: 1,
 
-    });
+        type
 
-  }
+      });
+
+    }
 
 
-  renderCart();
+    renderCart();
 
 };
 
 
 /* =========================================================
-   CART TOTAL
-   ========================================================= */
+   CART
+========================================================= */
 
-function getSubtotal() {
+function getCartSubtotal() {
 
   return cart.reduce(
     function(total, item) {
@@ -939,71 +1159,54 @@ function getSubtotal() {
 }
 
 
-function getDiscount() {
+function getCartDiscount() {
 
   const discount =
     Number(
-      getValue("discount")
+      document
+        .getElementById("discount")
+        ?.value || 0
     );
 
 
-  if (
-    isNaN(discount) ||
-    discount < 0
-  ) {
-
-    return 0;
-
-  }
-
-
-  return discount;
+  return Math.max(
+    0,
+    Math.min(
+      discount,
+      getCartSubtotal()
+    )
+  );
 
 }
 
 
 function getCartTotal() {
 
-  const subtotal =
-    getSubtotal();
-
-
-  const discount =
-    getDiscount();
-
-
-  return Math.max(
-    0,
-    subtotal - discount
+  return (
+    getCartSubtotal() -
+    getCartDiscount()
   );
 
 }
 
 
-/* =========================================================
-   CART RENDER
-   ========================================================= */
-
 function renderCart() {
 
-  const container =
-    document.getElementById(
-      "cart"
-    );
-
-  if (!container) return;
+  const box =
+    document.getElementById("cart");
 
 
-  if (cart.length === 0) {
+  if (!box) return;
 
-    container.innerHTML =
-      `<div class="empty">
-        🛒 Cart is empty
-      </div>`;
+
+  if (!cart.length) {
+
+    box.innerHTML =
+      '<p class="empty">Cart is empty.</p>';
 
   } else {
 
-    container.innerHTML =
+    box.innerHTML =
       cart.map(function(item, index) {
 
         const subtotal =
@@ -1031,8 +1234,14 @@ function renderCart() {
 
 
             <small>
+
+              ${item.type === "wholesale"
+                ? "Wholesale"
+                : "Retail"}
+
+              •
               ${money(item.price)}
-              each
+
             </small>
 
 
@@ -1044,15 +1253,18 @@ function renderCart() {
                 −
               </button>
 
+
               <button>
                 ${item.quantity}
               </button>
+
 
               <button
                 onclick="increaseQuantity(${index})"
               >
                 +
               </button>
+
 
               <button
                 onclick="removeFromCart(${index})"
@@ -1071,28 +1283,43 @@ function renderCart() {
   }
 
 
-  const subtotalBox =
+  const subtotal =
     document.getElementById(
       "cartSubtotal"
     );
 
-  const totalBox =
+
+  const discount =
+    document.getElementById(
+      "cartDiscount"
+    );
+
+
+  const total =
     document.getElementById(
       "cartTotal"
     );
 
 
-  if (subtotalBox) {
+  if (subtotal) {
 
-    subtotalBox.textContent =
-      money(getSubtotal());
+    subtotal.textContent =
+      money(getCartSubtotal());
 
   }
 
 
-  if (totalBox) {
+  if (discount) {
 
-    totalBox.textContent =
+    discount.textContent =
+      money(getCartDiscount());
+
+  }
+
+
+  if (total) {
+
+    total.textContent =
       money(getCartTotal());
 
   }
@@ -1103,106 +1330,120 @@ function renderCart() {
 }
 
 
-/* =========================================================
-   QUANTITY
-   ========================================================= */
-
 window.increaseQuantity =
-function(index) {
+  function(index) {
 
-  const item =
-    cart[index];
-
-
-  if (!item) return;
+    const item =
+      cart[index];
 
 
-  const product =
-    products.find(function(product) {
-
-      return String(product.id) ===
-        String(item.productId);
-
-    });
+    if (!item) return;
 
 
-  if (!product) return;
+    const product =
+      products.find(function(product) {
+
+        return (
+          product.id ===
+          item.productId
+        );
+
+      });
 
 
-  if (
-    item.quantity >=
-    Number(product.stock)
-  ) {
-
-    alert(
-      "Not enough stock."
-    );
-
-    return;
-
-  }
+    if (!product) return;
 
 
-  item.quantity++;
+    if (
+      item.quantity >=
+      Number(product.stock)
+    ) {
 
-  renderCart();
+      alert("Not enough stock.");
 
-};
+      return;
+
+    }
+
+
+    item.quantity++;
+
+    renderCart();
+
+  };
 
 
 window.decreaseQuantity =
-function(index) {
+  function(index) {
 
-  if (!cart[index]) return;
+    if (!cart[index]) return;
 
 
-  if (
-    cart[index].quantity > 1
-  ) {
+    if (
+      cart[index].quantity > 1
+    ) {
 
-    cart[index].quantity--;
+      cart[index].quantity--;
 
-  } else {
+    } else {
 
-    cart.splice(
-      index,
-      1
+      cart.splice(index, 1);
+
+    }
+
+
+    renderCart();
+
+  };
+
+
+window.removeFromCart =
+  function(index) {
+
+    cart.splice(index, 1);
+
+    renderCart();
+
+  };
+
+
+/* =========================================================
+   DISCOUNT
+========================================================= */
+
+function setupDiscount() {
+
+  const discount =
+    document.getElementById(
+      "discount"
+    );
+
+
+  if (discount) {
+
+    discount.addEventListener(
+      "input",
+      renderCart
     );
 
   }
 
-
-  renderCart();
-
-};
-
-
-window.removeFromCart =
-function(index) {
-
-  cart.splice(
-    index,
-    1
-  );
-
-  renderCart();
-
-};
+}
 
 
 /* =========================================================
-   CHANGE
-   ========================================================= */
+   PAYMENT
+========================================================= */
 
 function calculateChange() {
 
-  const box =
+  const display =
     document.getElementById(
       "changeDisplay"
     );
 
 
-  if (!box) return;
+  if (!display) return;
 
 
   const total =
@@ -1211,16 +1452,18 @@ function calculateChange() {
 
   const paid =
     Number(
-      getValue("amountPaid")
+      document
+        .getElementById("amountPaid")
+        ?.value || 0
     );
 
 
   if (
-    !total ||
-    !paid
+    !paid ||
+    !total
   ) {
 
-    box.innerHTML = "";
+    display.innerHTML = "";
 
     return;
 
@@ -1229,22 +1472,26 @@ function calculateChange() {
 
   if (paid < total) {
 
-    box.innerHTML = `
+    display.innerHTML = `
 
-      <strong>
+      <strong style="color:#dc2626">
+
         Amount remaining:
         ${money(total - paid)}
+
       </strong>
 
     `;
 
   } else {
 
-    box.innerHTML = `
+    display.innerHTML = `
 
-      <strong>
+      <strong style="color:#168344">
+
         Change:
         ${money(paid - total)}
+
       </strong>
 
     `;
@@ -1254,18 +1501,35 @@ function calculateChange() {
 }
 
 
+function setupPayment() {
+
+  const input =
+    document.getElementById(
+      "amountPaid"
+    );
+
+
+  if (input) {
+
+    input.addEventListener(
+      "input",
+      calculateChange
+    );
+
+  }
+
+}
+
+
 /* =========================================================
    COMPLETE SALE
-   ========================================================= */
+========================================================= */
 
-window.completeSale =
-function() {
+function completeSale() {
 
-  if (cart.length === 0) {
+  if (!cart.length) {
 
-    alert(
-      "Your cart is empty."
-    );
+    alert("Your cart is empty.");
 
     return;
 
@@ -1273,41 +1537,23 @@ function() {
 
 
   const customerName =
-    getValue("customerName");
+    document
+      .getElementById("customerName")
+      ?.value
+      .trim() || "Walk-in Customer";
 
 
   const customerPhone =
-    getValue("customerPhone");
+    document
+      .getElementById("customerPhone")
+      ?.value
+      .trim() || "";
 
 
-  if (!customerName) {
-
-    alert(
-      "Please enter customer name."
-    );
-
-    return;
-
-  }
-
-
-  if (!customerPhone) {
-
-    alert(
-      "Please enter customer phone."
-    );
-
-    return;
-
-  }
-
-
-  const subtotal =
-    getSubtotal();
-
-
-  const discount =
-    getDiscount();
+  const paymentMethod =
+    document
+      .getElementById("paymentMethod")
+      ?.value || "Cash";
 
 
   const total =
@@ -1316,14 +1562,13 @@ function() {
 
   const paid =
     Number(
-      getValue("amountPaid")
+      document
+        .getElementById("amountPaid")
+        ?.value || 0
     );
 
 
-  if (
-    isNaN(paid) ||
-    paid < total
-  ) {
+  if (paid < total) {
 
     alert(
       "Amount paid is not enough.\n\n" +
@@ -1336,50 +1581,42 @@ function() {
   }
 
 
-  const paymentMethod =
-    getValue(
-      "paymentMethod"
-    ) || "Cash";
+  const discount =
+    getCartDiscount();
 
 
-  const change =
-    paid - total;
+  let cost =
+    0;
 
 
-  /* ==========================
-     CALCULATE PROFIT
-     ========================== */
+  cart.forEach(function(item) {
 
-  const cost =
-    cart.reduce(
-      function(totalCost, item) {
+    cost +=
+      item.costPrice *
+      item.quantity;
 
-        return totalCost +
-          (
-            item.costPrice *
-            item.quantity
-          );
-
-      },
-      0
-    );
+  });
 
 
   const grossProfit =
     total - cost;
 
 
-  /* ==========================
-     REDUCE STOCK
-     ========================== */
+  const change =
+    paid - total;
+
+
+  /* REDUCE STOCK */
 
   cart.forEach(function(item) {
 
     const product =
       products.find(function(product) {
 
-        return String(product.id) ===
-          String(item.productId);
+        return (
+          product.id ===
+          item.productId
+        );
 
       });
 
@@ -1387,37 +1624,85 @@ function() {
     if (product) {
 
       product.stock =
-        Math.max(
-          0,
-          Number(product.stock) -
-          Number(item.quantity)
-        );
+        Number(product.stock) -
+        item.quantity;
 
     }
 
   });
 
 
-  /* ==========================
-     SAVE SALE
-     ========================== */
+  /* CUSTOMER */
+
+  if (customerName !== "Walk-in Customer") {
+
+    let customer =
+      customers.find(function(item) {
+
+        return (
+          (
+            customerPhone &&
+            item.phone ===
+            customerPhone
+          ) ||
+
+          (
+            item.name ===
+            customerName
+          )
+        );
+
+      });
+
+
+    if (!customer) {
+
+      customer = {
+
+        id:
+          generateID("customer"),
+
+        name:
+          customerName,
+
+        phone:
+          customerPhone,
+
+        totalSpent: 0,
+
+        purchases: 0,
+
+        createdAt:
+          new Date().toISOString()
+
+      };
+
+
+      customers.push(customer);
+
+    }
+
+
+    customer.totalSpent += total;
+
+    customer.purchases++;
+
+  }
+
 
   const sale = {
 
     id:
-      generateId(),
+      generateID("sale"),
 
     date:
       new Date().toISOString(),
 
-    customerName:
-      customerName,
+    customerName,
 
-    customerPhone:
-      customerPhone,
+    customerPhone,
 
-    paymentMethod:
-      paymentMethod,
+    paymentMethod,
 
     items:
       cart.map(function(item) {
@@ -1437,47 +1722,44 @@ function() {
             item.costPrice,
 
           quantity:
-            item.quantity
+            item.quantity,
+
+          type:
+            item.type
 
         };
 
       }),
 
     subtotal:
-      subtotal,
+      getCartSubtotal(),
 
-    discount:
-      discount,
+    discount,
 
-    total:
-      total,
+    total,
 
-    cost:
-      cost,
+    cost,
 
-    grossProfit:
-      grossProfit,
+    grossProfit,
 
-    paid:
-      paid,
+    paid,
 
-    change:
-      change
+    change
 
   };
 
 
-  sales.unshift(
-    sale
-  );
+  sales.unshift(sale);
 
 
-  saveData();
+  saveProducts();
+
+  saveSales();
+
+  saveCustomers();
 
 
-  showReceipt(
-    sale
-  );
+  showReceipt(sale);
 
 
   cart = [];
@@ -1496,7 +1778,7 @@ function() {
 
   renderRecentSales();
 
-  renderSales();
+  renderSalesHistory();
 
   renderCustomers();
 
@@ -1504,15 +1786,15 @@ function() {
 
 
   alert(
-    "✅ Sale completed successfully!"
+    "Sale completed successfully."
   );
 
-};
+}
 
 
-/* =========================================================
-   CLEAR SALE FORM
-   ========================================================= */
+window.completeSale =
+  completeSale;
+
 
 function clearSaleForm() {
 
@@ -1521,15 +1803,14 @@ function clearSaleForm() {
     "customerPhone",
     "amountPaid",
     "discount"
-  ]
-  .forEach(function(id) {
+  ].forEach(function(id) {
 
-    const element =
+    const field =
       document.getElementById(id);
 
-    if (element) {
+    if (field) {
 
-      element.value = "";
+      field.value = "";
 
     }
 
@@ -1544,75 +1825,575 @@ function clearSaleForm() {
 
   if (payment) {
 
-    payment.value =
-      "Cash";
+    payment.value = "Cash";
 
   }
 
-
-  calculateChange();
 
 }
 
 
 /* =========================================================
-   EXPENSES
-   ========================================================= */
+   RECEIPT
+========================================================= */
 
-window.addExpense =
-function() {
+function showReceipt(sale) {
 
-  const category =
-    getValue(
-      "expenseCategory"
+  const receipt =
+    document.getElementById(
+      "receipt"
     );
 
 
-  const amount =
-    Number(
-      getValue(
-        "expenseAmount"
-      )
-    );
+  if (!receipt) return;
 
 
-  const date =
-    getValue(
-      "expenseDate"
-    ) ||
-    new Date()
-      .toISOString()
-      .slice(
-        0,
-        10
+  let items = "";
+
+
+  sale.items.forEach(function(item) {
+
+    items += `
+
+      <div class="receipt-line">
+
+        <span>
+
+          ${escapeHTML(item.name)}
+          × ${item.quantity}
+
+        </span>
+
+        <span>
+
+          ${money(
+            item.price *
+            item.quantity
+          )}
+
+        </span>
+
+      </div>
+
+    `;
+
+  });
+
+
+  receipt.innerHTML = `
+
+    <h2>
+
+      ${escapeHTML(
+        storeSettings.storeName
+      )}
+
+    </h2>
+
+
+    ${
+      storeSettings.address
+        ? `<p>${escapeHTML(
+            storeSettings.address
+          )}</p>`
+        : ""
+    }
+
+
+    ${
+      storeSettings.city
+        ? `<p>${escapeHTML(
+            storeSettings.city
+          )}</p>`
+        : ""
+    }
+
+
+    ${
+      storeSettings.phone
+        ? `<p>${escapeHTML(
+            storeSettings.phone
+          )}</p>`
+        : ""
+    }
+
+
+    <p>
+      <strong>SALES RECEIPT</strong>
+    </p>
+
+
+    <hr>
+
+
+    <p>
+      Customer:
+      ${escapeHTML(
+        sale.customerName
+      )}
+    </p>
+
+
+    <p>
+      Payment:
+      ${escapeHTML(
+        sale.paymentMethod
+      )}
+    </p>
+
+
+    <p>
+      ${new Date(
+        sale.date
+      ).toLocaleString()}
+    </p>
+
+
+    <hr>
+
+
+    ${items}
+
+
+    <hr>
+
+
+    <div class="receipt-line">
+
+      <strong>Subtotal</strong>
+
+      <strong>
+        ${money(sale.subtotal)}
+      </strong>
+
+    </div>
+
+
+    <div class="receipt-line">
+
+      <span>Discount</span>
+
+      <span>
+        ${money(sale.discount)}
+      </span>
+
+    </div>
+
+
+    <div class="receipt-line">
+
+      <strong>TOTAL</strong>
+
+      <strong>
+        ${money(sale.total)}
+      </strong>
+
+    </div>
+
+
+    <div class="receipt-line">
+
+      <span>Paid</span>
+
+      <span>
+        ${money(sale.paid)}
+      </span>
+
+    </div>
+
+
+    <div class="receipt-line">
+
+      <span>Change</span>
+
+      <span>
+        ${money(sale.change)}
+      </span>
+
+    </div>
+
+
+    <p>
+      ${escapeHTML(
+        storeSettings.receiptFooter
+      )}
+    </p>
+
+
+    <button
+      class="primary-action"
+      onclick="printReceipt()"
+    >
+
+      🖨️ Print Receipt
+
+    </button>
+
+  `;
+
+
+  receipt.style.display =
+    "block";
+
+}
+
+
+window.printReceipt =
+  function() {
+
+    const receipt =
+      document.getElementById(
+        "receipt"
       );
 
 
-  const notes =
-    getValue(
-      "expenseNotes"
+    if (!receipt) return;
+
+
+    const printWindow =
+      window.open(
+        "",
+        "_blank"
+      );
+
+
+    if (!printWindow) {
+
+      alert(
+        "Please allow pop-ups to print."
+      );
+
+      return;
+
+    }
+
+
+    printWindow.document.write(`
+
+      <html>
+
+        <head>
+
+          <title>
+            ${escapeHTML(
+              storeSettings.storeName
+            )}
+          </title>
+
+
+          <style>
+
+            body {
+
+              font-family:
+                Arial,
+                sans-serif;
+
+              max-width:
+                400px;
+
+              margin:
+                auto;
+
+              padding:
+                20px;
+
+              color:
+                #111;
+
+            }
+
+
+            .receipt-line {
+
+              display:
+                flex;
+
+              justify-content:
+                space-between;
+
+              gap:
+                20px;
+
+              margin:
+                8px 0;
+
+            }
+
+
+            button {
+
+              display:
+                none !important;
+
+            }
+
+
+            h2,
+            p {
+
+              text-align:
+                center;
+
+            }
+
+          </style>
+
+        </head>
+
+
+        <body>
+
+          ${receipt.innerHTML}
+
+        </body>
+
+      </html>
+
+    `);
+
+
+    printWindow.document.close();
+
+    printWindow.focus();
+
+
+    setTimeout(function() {
+
+      printWindow.print();
+
+    }, 300);
+
+  };
+
+
+/* =========================================================
+   SALES HISTORY
+========================================================= */
+
+function renderSalesHistory() {
+
+  const box =
+    document.getElementById(
+      "salesHistory"
     );
 
 
-  if (!category) {
+  if (!box) return;
 
-    alert(
-      "Please select an expense category."
-    );
+
+  if (!sales.length) {
+
+    box.innerHTML =
+      '<p class="empty">No sales yet.</p>';
 
     return;
 
   }
 
 
-  if (
-    isNaN(amount) ||
-    amount <= 0
-  ) {
+  box.innerHTML =
+    sales.map(function(sale) {
 
-    alert(
-      "Please enter a valid expense amount."
+      return `
+
+        <div class="history-card">
+
+          <strong>
+
+            🧾 Sale
+
+          </strong>
+
+
+          <small>
+
+            ${new Date(
+              sale.date
+            ).toLocaleString()}
+
+          </small>
+
+
+          <p>
+
+            Customer:
+            ${escapeHTML(
+              sale.customerName
+            )}
+
+          </p>
+
+
+          <p>
+
+            Payment:
+            ${escapeHTML(
+              sale.paymentMethod
+            )}
+
+          </p>
+
+
+          <p>
+
+            Items:
+            ${sale.items.length}
+
+          </p>
+
+
+          <p>
+
+            Profit:
+            ${money(
+              sale.grossProfit
+            )}
+
+          </p>
+
+
+          <strong>
+
+            Total:
+            ${money(sale.total)}
+
+          </strong>
+
+        </div>
+
+      `;
+
+    }).join("");
+
+}
+
+
+/* =========================================================
+   CUSTOMERS
+========================================================= */
+
+function renderCustomers() {
+
+  const box =
+    document.getElementById(
+      "customerList"
     );
+
+
+  if (!box) return;
+
+
+  if (!customers.length) {
+
+    box.innerHTML =
+      '<p class="empty">No customers yet.</p>';
+
+    return;
+
+  }
+
+
+  box.innerHTML =
+    customers.map(function(customer) {
+
+      return `
+
+        <div class="history-card">
+
+          <h3>
+
+            ${escapeHTML(
+              customer.name
+            )}
+
+          </h3>
+
+
+          <p>
+
+            Phone:
+            ${escapeHTML(
+              customer.phone ||
+              "Not provided"
+            )}
+
+          </p>
+
+
+          <p>
+
+            Purchases:
+            ${customer.purchases}
+
+          </p>
+
+
+          <strong>
+
+            Total spent:
+            ${money(
+              customer.totalSpent
+            )}
+
+          </strong>
+
+        </div>
+
+      `;
+
+    }).join("");
+
+}
+
+
+/* =========================================================
+   EXPENSES
+========================================================= */
+
+function addExpense() {
+
+  const title =
+    document
+      .getElementById("expenseName")
+      ?.value
+      .trim();
+
+
+  const category =
+    document
+      .getElementById("expenseCategory")
+      ?.value
+      .trim() || "General";
+
+
+  const amount =
+    Number(
+      document
+        .getElementById("expenseAmount")
+        ?.value || 0
+    );
+
+
+  const notes =
+    document
+      .getElementById("expenseNotes")
+      ?.value
+      .trim() || "";
+
+
+  if (!title) {
+
+    alert("Enter expense name.");
+
+    return;
+
+  }
+
+
+  if (amount <= 0) {
+
+    alert("Enter a valid expense amount.");
 
     return;
 
@@ -1622,105 +2403,42 @@ function() {
   expenses.unshift({
 
     id:
-      generateId(),
+      generateID("expense"),
 
-    category:
-      category,
+    title,
 
-    amount:
-      amount,
+    category,
+
+    amount,
+
+    notes,
 
     date:
-      date,
-
-    notes:
-      notes
+      new Date().toISOString()
 
   });
 
 
-  saveData();
+  saveExpenses();
 
-  clearExpenseForm();
-
-  renderExpenses();
-
-  updateDashboard();
-
-  renderReports();
-
-
-  alert(
-    "✅ Expense added."
-  );
-
-};
-
-
-/* =========================================================
-   EXPENSE FORM
-   ========================================================= */
-
-function clearExpenseForm() {
 
   [
-    "expenseCategory",
+    "expenseName",
     "expenseAmount",
-    "expenseDate",
     "expenseNotes"
-  ]
-  .forEach(function(id) {
+  ].forEach(function(id) {
 
-    const element =
+    const field =
       document.getElementById(id);
 
-    if (element) {
+    if (field) {
 
-      element.value = "";
+      field.value = "";
 
     }
 
   });
 
-}
-
-
-/* =========================================================
-   DELETE EXPENSE
-   ========================================================= */
-
-window.deleteExpense =
-function(id) {
-
-  const index =
-    expenses.findIndex(function(expense) {
-
-      return String(expense.id) ===
-        String(id);
-
-    });
-
-
-  if (index === -1) return;
-
-
-  if (
-    !confirm(
-      "Delete this expense?"
-    )
-  ) {
-
-    return;
-
-  }
-
-
-  expenses.splice(
-    index,
-    1
-  );
-
-  saveData();
 
   renderExpenses();
 
@@ -1728,37 +2446,35 @@ function(id) {
 
   renderReports();
 
-};
+}
 
 
-/* =========================================================
-   EXPENSE DISPLAY
-   ========================================================= */
+window.addExpense =
+  addExpense;
+
 
 function renderExpenses() {
 
-  const container =
+  const box =
     document.getElementById(
-      "expensesList"
+      "expenseList"
     );
 
 
-  if (!container) return;
+  if (!box) return;
 
 
-  if (expenses.length === 0) {
+  if (!expenses.length) {
 
-    container.innerHTML =
-      `<div class="empty">
-        No expenses yet.
-      </div>`;
+    box.innerHTML =
+      '<p class="empty">No expenses recorded.</p>';
 
     return;
 
   }
 
 
-  container.innerHTML =
+  box.innerHTML =
     expenses.map(function(expense) {
 
       return `
@@ -1766,22 +2482,41 @@ function renderExpenses() {
         <div class="history-card">
 
           <strong>
+
+            ${escapeHTML(
+              expense.title
+            )}
+
+          </strong>
+
+
+          <p>
+
+            Category:
             ${escapeHTML(
               expense.category
             )}
-          </strong>
+
+          </p>
+
 
           <p>
+
             ${money(
               expense.amount
             )}
+
           </p>
 
+
           <small>
-            ${escapeHTML(
+
+            ${new Date(
               expense.date
-            )}
+            ).toLocaleString()}
+
           </small>
+
 
           ${
             expense.notes
@@ -1799,7 +2534,9 @@ function renderExpenses() {
           <button
             onclick="deleteExpense('${expense.id}')"
           >
-            🗑️ Delete
+
+            Delete
+
           </button>
 
         </div>
@@ -1811,310 +2548,31 @@ function renderExpenses() {
 }
 
 
-/* =========================================================
-   CUSTOMERS
-   ========================================================= */
+window.deleteExpense =
+  function(id) {
 
-function getCustomers() {
+    expenses =
+      expenses.filter(function(expense) {
 
-  const map =
-    new Map();
+        return expense.id !== id;
 
-
-  sales.forEach(function(sale) {
-
-    const phone =
-      sale.customerPhone || "";
+      });
 
 
-    const key =
-      phone ||
-      sale.customerName;
+    saveExpenses();
 
+    renderExpenses();
 
-    if (!key) return;
+    updateDashboard();
 
+    renderReports();
 
-    if (!map.has(key)) {
-
-      map.set(
-        key,
-        {
-          name:
-            sale.customerName,
-
-          phone:
-            phone,
-
-          purchases:
-            0,
-
-          spent:
-            0
-        }
-      );
-
-    }
-
-
-    const customer =
-      map.get(key);
-
-
-    customer.purchases++;
-
-    customer.spent +=
-      Number(
-        sale.total
-      );
-
-  });
-
-
-  return [
-    ...map.values()
-  ];
-
-}
+  };
 
 
 /* =========================================================
-   CUSTOMER DISPLAY
-   ========================================================= */
-
-function renderCustomers() {
-
-  const container =
-    document.getElementById(
-      "customersList"
-    );
-
-
-  if (!container) return;
-
-
-  const customers =
-    getCustomers();
-
-
-  if (customers.length === 0) {
-
-    container.innerHTML =
-      `<div class="empty">
-        No customers yet.
-      </div>`;
-
-    return;
-
-  }
-
-
-  container.innerHTML =
-    customers.map(function(customer) {
-
-      return `
-
-        <div class="history-card">
-
-          <h3>
-            👤
-            ${escapeHTML(
-              customer.name
-            )}
-          </h3>
-
-          <p>
-            📞
-            ${escapeHTML(
-              customer.phone
-            )}
-          </p>
-
-          <p>
-            Purchases:
-            <strong>
-              ${customer.purchases}
-            </strong>
-          </p>
-
-          <p>
-            Total spent:
-            <strong>
-              ${money(
-                customer.spent
-              )}
-            </strong>
-          </p>
-
-        </div>
-
-      `;
-
-    }).join("");
-
-}
-
-
-/* =========================================================
-   SALES HISTORY
-   ========================================================= */
-
-function renderSales() {
-
-  const container =
-    document.getElementById(
-      "salesHistory"
-    );
-
-
-  if (!container) return;
-
-
-  if (sales.length === 0) {
-
-    container.innerHTML =
-      `<div class="empty">
-        No sales yet.
-      </div>`;
-
-    return;
-
-  }
-
-
-  container.innerHTML =
-    sales.map(function(sale) {
-
-      return `
-
-        <div class="history-card">
-
-          <strong>
-            🧾 Sale
-          </strong>
-
-          <p>
-            ${new Date(
-              sale.date
-            ).toLocaleString()}
-          </p>
-
-          <p>
-            Customer:
-            ${escapeHTML(
-              sale.customerName
-            )}
-          </p>
-
-          <p>
-            Payment:
-            ${escapeHTML(
-              sale.paymentMethod
-            )}
-          </p>
-
-          <p>
-            Total:
-            <strong>
-              ${money(
-                sale.total
-              )}
-            </strong>
-          </p>
-
-          <p>
-            Gross profit:
-            <strong>
-              ${money(
-                sale.grossProfit
-              )}
-            </strong>
-          </p>
-
-        </div>
-
-      `;
-
-    }).join("");
-
-}
-
-
-/* =========================================================
-   RECENT SALES
-   ========================================================= */
-
-function renderRecentSales() {
-
-  const container =
-    document.getElementById(
-      "recentSales"
-    );
-
-
-  if (!container) return;
-
-
-  const recent =
-    sales.slice(
-      0,
-      5
-    );
-
-
-  if (recent.length === 0) {
-
-    container.innerHTML =
-      `<div class="empty">
-        No recent sales.
-      </div>`;
-
-    return;
-
-  }
-
-
-  container.innerHTML =
-    recent.map(function(sale) {
-
-      return `
-
-        <div class="recent-sale">
-
-          <div>
-
-            <strong>
-              ${escapeHTML(
-                sale.customerName
-              )}
-            </strong>
-
-            <small>
-              ${new Date(
-                sale.date
-              ).toLocaleString()}
-            </small>
-
-          </div>
-
-          <strong>
-            ${money(
-              sale.total
-            )}
-          </strong>
-
-        </div>
-
-      `;
-
-    }).join("");
-
-}
-
-
-/* =========================================================
-   DASHBOARD
-   ========================================================= */
+   FINANCIAL CALCULATIONS
+========================================================= */
 
 function getRevenue() {
 
@@ -2122,9 +2580,7 @@ function getRevenue() {
     function(total, sale) {
 
       return total +
-        Number(
-          sale.total
-        );
+        Number(sale.total || 0);
 
     },
     0
@@ -2139,9 +2595,7 @@ function getCost() {
     function(total, sale) {
 
       return total +
-        Number(
-          sale.cost || 0
-        );
+        Number(sale.cost || 0);
 
     },
     0
@@ -2152,8 +2606,10 @@ function getCost() {
 
 function getGrossProfit() {
 
-  return getRevenue() -
-    getCost();
+  return (
+    getRevenue() -
+    getCost()
+  );
 
 }
 
@@ -2164,9 +2620,7 @@ function getExpenses() {
     function(total, expense) {
 
       return total +
-        Number(
-          expense.amount
-        );
+        Number(expense.amount || 0);
 
     },
     0
@@ -2177,198 +2631,266 @@ function getExpenses() {
 
 function getNetProfit() {
 
-  return getGrossProfit() -
-    getExpenses();
+  return (
+    getGrossProfit() -
+    getExpenses()
+  );
 
 }
 
 
-function updateDashboard() {
+function getTodayRevenue() {
 
-  setText(
-    "revenue",
-    money(
-      getRevenue()
-    )
-  );
+  return sales.reduce(
+    function(total, sale) {
 
+      if (isToday(sale.date)) {
 
-  setText(
-    "grossProfit",
-    money(
-      getGrossProfit()
-    )
-  );
-
-
-  setText(
-    "expenses",
-    money(
-      getExpenses()
-    )
-  );
-
-
-  setText(
-    "netProfit",
-    money(
-      getNetProfit()
-    )
-  );
-
-
-  setText(
-    "transactionCount",
-    sales.length
-  );
-
-
-  setText(
-    "productCount",
-    products.length
-  );
-
-
-  setText(
-    "lowStock",
-    products.filter(
-      function(product) {
-
-        return Number(
-          product.stock
-        ) <= 5;
+        return total +
+          Number(sale.total || 0);
 
       }
-    ).length
+
+      return total;
+
+    },
+    0
   );
 
-
-  setText(
-    "customerCount",
-    getCustomers().length
-  );
+}
 
 
-  const todayRevenue =
-    sales
-      .filter(function(sale) {
+function getTodayExpenses() {
 
-        return new Date(
-          sale.date
-        ).toDateString() ===
-        todayString();
+  return expenses.reduce(
+    function(total, expense) {
 
-      })
-      .reduce(
-        function(total, sale) {
+      if (isToday(expense.date)) {
 
-          return total +
-            Number(
-              sale.total
-            );
+        return total +
+          Number(expense.amount || 0);
 
-        },
-        0
-      );
+      }
 
+      return total;
 
-  setText(
-    "todayRevenue",
-    money(
-      todayRevenue
-    )
+    },
+    0
   );
 
 }
 
 
 /* =========================================================
-   REPORTS
-   ========================================================= */
+   DASHBOARD
+========================================================= */
 
-function renderReports() {
+function updateDashboard() {
 
-  const bestSelling =
-    getBestSellingProducts();
+  const values = {
+
+    revenue:
+      getTodayRevenue(),
+
+    grossProfit:
+      sales
+        .filter(function(sale) {
+
+          return isToday(sale.date);
+
+        })
+        .reduce(function(total, sale) {
+
+          return total +
+            Number(
+              sale.grossProfit || 0
+            );
+
+        }, 0),
+
+    expenses:
+      getTodayExpenses(),
+
+    netProfit:
+      sales
+        .filter(function(sale) {
+
+          return isToday(sale.date);
+
+        })
+        .reduce(function(total, sale) {
+
+          return total +
+            Number(
+              sale.grossProfit || 0
+            );
+
+        }, 0) -
+      getTodayExpenses(),
+
+    transactions:
+      sales.length,
+
+    products:
+      products.length,
+
+    lowStock:
+      products.filter(function(product) {
+
+        return Number(
+          product.stock || 0
+        ) <= 5;
+
+      }).length,
+
+    customers:
+      customers.length
+
+  };
 
 
-  setText(
-    "reportRevenue",
-    money(
-      getRevenue()
-    )
-  );
+  const ids = {
+
+    revenue:
+      "revenue",
+
+    grossProfit:
+      "grossProfit",
+
+    expenses:
+      "expenses",
+
+    netProfit:
+      "netProfit",
+
+    transactions:
+      "transactionCount",
+
+    products:
+      "productCount",
+
+    lowStock:
+      "lowStock",
+
+    customers:
+      "customerCount"
+
+  };
 
 
-  setText(
-    "reportCost",
-    money(
-      getCost()
-    )
-  );
+  Object.keys(ids).forEach(function(key) {
+
+    const element =
+      document.getElementById(
+        ids[key]
+      );
 
 
-  setText(
-    "reportGrossProfit",
-    money(
-      getGrossProfit()
-    )
-  );
+    if (!element) return;
 
 
-  setText(
-    "reportExpenses",
-    money(
-      getExpenses()
-    )
-  );
+    if (
+      [
+        "revenue",
+        "grossProfit",
+        "expenses",
+        "netProfit"
+      ].includes(key)
+    ) {
+
+      element.textContent =
+        money(values[key]);
+
+    } else {
+
+      element.textContent =
+        values[key];
+
+    }
+
+  });
 
 
-  setText(
-    "reportNetProfit",
-    money(
-      getNetProfit()
-    )
-  );
-
-
-  const container =
+  const salesTotal =
     document.getElementById(
-      "bestSellingProducts"
+      "salesTotal"
     );
 
 
-  if (!container) return;
+  if (salesTotal) {
+
+    salesTotal.textContent =
+      money(getTodayRevenue());
+
+  }
 
 
-  if (bestSelling.length === 0) {
+  renderRecentSales();
 
-    container.innerHTML =
-      `<div class="empty">
-        No sales data yet.
-      </div>`;
+}
+
+
+/* =========================================================
+   RECENT SALES
+========================================================= */
+
+function renderRecentSales() {
+
+  const box =
+    document.getElementById(
+      "recentSales"
+    );
+
+
+  if (!box) return;
+
+
+  const recent =
+    sales.slice(0, 5);
+
+
+  if (!recent.length) {
+
+    box.innerHTML =
+      '<p class="empty">No recent sales.</p>';
 
     return;
 
   }
 
 
-  container.innerHTML =
-    bestSelling.map(function(item) {
+  box.innerHTML =
+    recent.map(function(sale) {
 
       return `
 
-        <div class="recent-sale">
-
-          <span>
-            ${escapeHTML(
-              item.name
-            )}
-          </span>
+        <div class="history-card">
 
           <strong>
-            ${item.quantity} sold
+
+            ${escapeHTML(
+              sale.customerName
+            )}
+
           </strong>
+
+
+          <span>
+
+            ${money(
+              sale.total
+            )}
+
+          </span>
+
+
+          <small>
+
+            ${new Date(
+              sale.date
+            ).toLocaleString()}
+
+          </small>
 
         </div>
 
@@ -2380,893 +2902,459 @@ function renderReports() {
 
 
 /* =========================================================
-   BEST SELLING PRODUCTS
-   ========================================================= */
+   REPORTS
+========================================================= */
 
-function getBestSellingProducts() {
+function renderReports() {
 
-  const map =
-    new Map();
+  const values = {
+
+    revenue:
+      getRevenue(),
+
+    cost:
+      getCost(),
+
+    grossProfit:
+      getGrossProfit(),
+
+    expenses:
+      getExpenses(),
+
+    netProfit:
+      getNetProfit()
+
+  };
+
+
+  const ids = {
+
+    reportRevenue:
+      "revenue",
+
+    reportCost:
+      "cost",
+
+    reportGrossProfit:
+      "grossProfit",
+
+    reportExpenses:
+      "expenses",
+
+    reportNetProfit:
+      "netProfit"
+
+  };
+
+
+  Object.keys(ids).forEach(function(id) {
+
+    const element =
+      document.getElementById(id);
+
+
+    if (!element) return;
+
+
+    element.textContent =
+      money(values[ids[id]]);
+
+  });
+
+
+  renderBestSellingProducts();
+
+}
+
+
+function renderBestSellingProducts() {
+
+  const box =
+    document.getElementById(
+      "bestSellingProducts"
+    );
+
+
+  if (!box) return;
+
+
+  const totals = {};
 
 
   sales.forEach(function(sale) {
 
     sale.items.forEach(function(item) {
 
-      if (
-        !map.has(
-          item.name
-        )
-      ) {
+      if (!totals[item.name]) {
 
-        map.set(
-          item.name,
-          0
-        );
+        totals[item.name] = 0;
 
       }
 
 
-      map.set(
-        item.name,
-
-        map.get(
-          item.name
-        ) +
-        Number(
-          item.quantity
-        )
-      );
+      totals[item.name] +=
+        Number(item.quantity || 0);
 
     });
 
   });
 
 
-  return [
-    ...map.entries()
-  ]
-  .map(function(entry) {
+  const ranking =
+    Object.entries(totals)
+      .sort(function(a, b) {
 
-    return {
+        return b[1] - a[1];
 
-      name:
-        entry[0],
+      })
+      .slice(0, 10);
 
-      quantity:
-        entry[1]
+
+  if (!ranking.length) {
+
+    box.innerHTML =
+      '<p class="empty">No sales data yet.</p>';
+
+    return;
+
+  }
+
+
+  box.innerHTML =
+    ranking.map(function(item, index) {
+
+      return `
+
+        <div class="history-card">
+
+          <strong>
+
+            #${index + 1}
+            ${escapeHTML(item[0])}
+
+          </strong>
+
+
+          <span>
+
+            ${item[1]} sold
+
+          </span>
+
+        </div>
+
+      `;
+
+    }).join("");
+
+}
+
+
+/* =========================================================
+   BACKUP
+========================================================= */
+
+window.exportData =
+  function() {
+
+    const backup = {
+
+      version: 2,
+
+      exportedAt:
+        new Date().toISOString(),
+
+      products,
+
+      sales,
+
+      customers,
+
+      expenses,
+
+      storeSettings
 
     };
 
-  })
-  .sort(
-    function(a, b) {
 
-      return b.quantity -
-        a.quantity;
-
-    }
-  )
-  .slice(
-    0,
-    10
-  );
-
-}
-
-
-/* =========================================================
-   SETTINGS
-   ========================================================= */
-
-function loadSettingsForm() {
-
-  setValue(
-    "storeName",
-    storeSettings.storeName
-  );
-
-  setValue(
-    "ownerName",
-    storeSettings.ownerName
-  );
-
-  setValue(
-    "storePhone",
-    storeSettings.phone
-  );
-
-  setValue(
-    "storeEmail",
-    storeSettings.email
-  );
-
-  setValue(
-    "storeAddress",
-    storeSettings.address
-  );
-
-  setValue(
-    "storeCity",
-    storeSettings.city
-  );
-
-  setValue(
-    "receiptFooter",
-    storeSettings.receiptFooter
-  );
+    const blob =
+      new Blob(
+        [
+          JSON.stringify(
+            backup,
+            null,
+            2
+          )
+        ],
+        {
+          type:
+            "application/json"
+        }
+      );
 
 
-  updateStoreTitle();
-
-}
-
-
-/* =========================================================
-   SAVE SETTINGS
-   ========================================================= */
-
-window.saveStoreSettings =
-function() {
-
-  const name =
-    getValue(
-      "storeName"
-    );
+    const url =
+      URL.createObjectURL(blob);
 
 
-  if (!name) {
-
-    alert(
-      "Please enter your store name."
-    );
-
-    return;
-
-  }
+    const link =
+      document.createElement("a");
 
 
-  storeSettings = {
+    link.href = url;
 
-    ...storeSettings,
+    link.download =
+      (
+        storeSettings.storeName ||
+        "my-store"
+      )
+      .replace(/\s+/g, "-")
+      .toLowerCase() +
+      "-backup.json";
 
-    storeName:
-      name,
 
-    ownerName:
-      getValue(
-        "ownerName"
-      ),
+    link.click();
 
-    phone:
-      getValue(
-        "storePhone"
-      ),
 
-    email:
-      getValue(
-        "storeEmail"
-      ),
-
-    address:
-      getValue(
-        "storeAddress"
-      ),
-
-    city:
-      getValue(
-        "storeCity"
-      ),
-
-    receiptFooter:
-      getValue(
-        "receiptFooter"
-      ) ||
-      "Thank you for shopping with us!"
+    URL.revokeObjectURL(url);
 
   };
 
 
-  saveSettings();
-
-  updateStoreTitle();
-
-
-  const message =
-    document.getElementById(
-      "storeSaveMessage"
-    );
-
-
-  if (message) {
-
-    message.textContent =
-      "✅ Business information saved.";
-
-    setTimeout(
-      function() {
-
-        message.textContent =
-          "";
-
-      },
-      3000
-    );
-
-  }
-
-};
-
-
 /* =========================================================
-   STORE TITLE
-   ========================================================= */
+   RESTORE
+========================================================= */
 
-function updateStoreTitle() {
+window.importData =
+  function(input) {
 
-  const title =
-    document.getElementById(
-      "appStoreName"
-    );
+    const file =
+      input.files?.[0];
 
 
-  const letter =
-    document.getElementById(
-      "profileLetter"
-    );
+    if (!file) return;
 
 
-  const name =
-    storeSettings.storeName ||
-    "My Store";
+    const reader =
+      new FileReader();
 
 
-  if (title) {
+    reader.onload =
+      function(event) {
 
-    title.textContent =
-      name;
+        try {
 
-  }
+          const data =
+            JSON.parse(
+              event.target.result
+            );
 
 
-  if (letter) {
+          if (!data) {
 
-    letter.textContent =
-      name
-        .charAt(0)
-        .toUpperCase();
-
-  }
-
-
-  document.title =
-    name +
-    " POS";
-
-}
-
-
-/* =========================================================
-   RECEIPT
-   ========================================================= */
-
-function showReceipt(sale) {
-
-  const receipt =
-    document.getElementById(
-      "receipt"
-    );
-
-
-  if (!receipt) return;
-
-
-  let itemsHTML =
-    "";
-
-
-  sale.items.forEach(function(item) {
-
-    itemsHTML += `
-
-      <div class="receipt-line">
-
-        <span>
-          ${escapeHTML(
-            item.name
-          )}
-          × ${item.quantity}
-        </span>
-
-        <span>
-          ${money(
-            item.price *
-            item.quantity
-          )}
-        </span>
-
-      </div>
-
-    `;
-
-  });
-
-
-  receipt.innerHTML = `
-
-    <h2>
-      ${escapeHTML(
-        storeSettings.storeName
-      )}
-    </h2>
-
-    ${
-      storeSettings.address
-        ? `<p>
-            ${escapeHTML(
-              storeSettings.address
-            )}
-          </p>`
-        : ""
-    }
-
-    ${
-      storeSettings.city
-        ? `<p>
-            ${escapeHTML(
-              storeSettings.city
-            )}
-          </p>`
-        : ""
-    }
-
-    ${
-      storeSettings.phone
-        ? `<p>
-            ${escapeHTML(
-              storeSettings.phone
-            )}
-          </p>`
-        : ""
-    }
-
-    <hr>
-
-    <strong>
-      SALES RECEIPT
-    </strong>
-
-    <p>
-      Customer:
-      ${escapeHTML(
-        sale.customerName
-      )}
-    </p>
-
-    <p>
-      Phone:
-      ${escapeHTML(
-        sale.customerPhone
-      )}
-    </p>
-
-    <p>
-      Payment:
-      ${escapeHTML(
-        sale.paymentMethod
-      )}
-    </p>
-
-    <p>
-      Date:
-      ${new Date(
-        sale.date
-      ).toLocaleString()}
-    </p>
-
-    <hr>
-
-    ${itemsHTML}
-
-    <hr>
-
-    <div class="receipt-line">
-
-      <strong>
-        SUBTOTAL
-      </strong>
-
-      <strong>
-        ${money(
-          sale.subtotal
-        )}
-      </strong>
-
-    </div>
-
-    <div class="receipt-line">
-
-      <strong>
-        DISCOUNT
-      </strong>
-
-      <strong>
-        ${money(
-          sale.discount
-        )}
-      </strong>
-
-    </div>
-
-    <div class="receipt-line">
-
-      <strong>
-        TOTAL
-      </strong>
-
-      <strong>
-        ${money(
-          sale.total
-        )}
-      </strong>
-
-    </div>
-
-    <div class="receipt-line">
-
-      <span>
-        PAID
-      </span>
-
-      <span>
-        ${money(
-          sale.paid
-        )}
-      </span>
-
-    </div>
-
-    <div class="receipt-line">
-
-      <span>
-        CHANGE
-      </span>
-
-      <span>
-        ${money(
-          sale.change
-        )}
-      </span>
-
-    </div>
-
-    <p>
-      ${escapeHTML(
-        storeSettings.receiptFooter
-      )}
-    </p>
-
-    <button
-      class="primary-action"
-      onclick="printReceipt()"
-    >
-      🖨️ Print Receipt
-    </button>
-
-  `;
-
-
-  receipt.style.display =
-    "block";
-
-}
-
-
-/* =========================================================
-   PRINT RECEIPT
-   ========================================================= */
-
-window.printReceipt =
-function() {
-
-  const receipt =
-    document.getElementById(
-      "receipt"
-    );
-
-
-  if (!receipt) return;
-
-
-  const printWindow =
-    window.open(
-      "",
-      "_blank"
-    );
-
-
-  if (!printWindow) {
-
-    alert(
-      "Please allow pop-ups to print."
-    );
-
-    return;
-
-  }
-
-
-  printWindow.document.write(`
-
-    <html>
-
-      <head>
-
-        <title>
-          ${escapeHTML(
-            storeSettings.storeName
-          )}
-        </title>
-
-        <style>
-
-          body {
-
-            font-family:
-              Arial,
-              sans-serif;
-
-            max-width:
-              400px;
-
-            margin:
-              auto;
-
-            padding:
-              20px;
-
-            color:
-              #111;
+            throw new Error(
+              "Invalid backup."
+            );
 
           }
 
-          .receipt-line {
 
-            display:
-              flex;
+          if (
+            !confirm(
+              "Restore this backup? Existing data will be replaced."
+            )
+          ) {
 
-            justify-content:
-              space-between;
-
-            gap:
-              20px;
-
-            margin:
-              8px 0;
+            return;
 
           }
 
-          button {
 
-            display:
-              none !important;
+          products =
+            Array.isArray(
+              data.products
+            )
+              ? data.products
+              : [];
+
+
+          sales =
+            Array.isArray(
+              data.sales
+            )
+              ? data.sales
+              : [];
+
+
+          customers =
+            Array.isArray(
+              data.customers
+            )
+              ? data.customers
+              : [];
+
+
+          expenses =
+            Array.isArray(
+              data.expenses
+            )
+              ? data.expenses
+              : [];
+
+
+          if (data.storeSettings) {
+
+            storeSettings = {
+
+              ...storeSettings,
+
+              ...data.storeSettings
+
+            };
 
           }
 
-          h2,
-          p {
 
-            text-align:
-              center;
+          saveProducts();
 
-          }
+          saveSales();
 
-          hr {
+          saveCustomers();
 
-            border:
-              0;
+          saveExpenses();
 
-            border-top:
-              1px dashed #999;
+          saveSettings();
 
-          }
 
-        </style>
+          loadStoreSettings();
 
-      </head>
+          renderInventory();
 
-      <body>
+          renderPOSProducts();
 
-        ${receipt.innerHTML}
+          renderCart();
 
-      </body>
+          renderCustomers();
 
-    </html>
+          renderSalesHistory();
 
-  `);
+          renderExpenses();
 
+          renderReports();
 
-  printWindow.document.close();
+          updateDashboard();
 
-  printWindow.focus();
 
+          alert(
+            "Backup restored successfully."
+          );
 
-  setTimeout(
-    function() {
 
-      printWindow.print();
+        } catch (error) {
 
-    },
-    300
-  );
+          alert(
+            "Could not restore this backup."
+          );
 
-};
-
-
-/* =========================================================
-   BACKUP DATA
-   ========================================================= */
-
-window.backupData =
-function() {
-
-  const backup = {
-
-    version:
-      "2.0",
-
-    createdAt:
-      new Date().toISOString(),
-
-    products:
-      products,
-
-    sales:
-      sales,
-
-    expenses:
-      expenses,
-
-    settings:
-      storeSettings
-
-  };
-
-
-  const blob =
-    new Blob(
-      [
-        JSON.stringify(
-          backup,
-          null,
-          2
-        )
-      ],
-      {
-        type:
-          "application/json"
-      }
-    );
-
-
-  const url =
-    URL.createObjectURL(
-      blob
-    );
-
-
-  const link =
-    document.createElement(
-      "a"
-    );
-
-
-  link.href =
-    url;
-
-  link.download =
-    "my-store-pos-backup.json";
-
-
-  document.body.appendChild(
-    link
-  );
-
-  link.click();
-
-  link.remove();
-
-
-  URL.revokeObjectURL(
-    url
-  );
-
-};
-
-
-/* =========================================================
-   RESTORE DATA
-   ========================================================= */
-
-window.restoreData =
-function(input) {
-
-  const file =
-    input.files &&
-    input.files[0];
-
-
-  if (!file) return;
-
-
-  const reader =
-    new FileReader();
-
-
-  reader.onload =
-  function(event) {
-
-    try {
-
-      const backup =
-        JSON.parse(
-          event.target.result
-        );
-
-
-      if (
-        !backup ||
-        !Array.isArray(
-          backup.products
-        ) ||
-        !Array.isArray(
-          backup.sales
-        )
-      ) {
-
-        throw new Error(
-          "Invalid backup file."
-        );
-
-      }
-
-
-      if (
-        !confirm(
-          "Restore this backup? Current data will be replaced."
-        )
-      ) {
-
-        return;
-
-      }
-
-
-      products =
-        backup.products || [];
-
-      sales =
-        backup.sales || [];
-
-      expenses =
-        backup.expenses || [];
-
-      storeSettings = {
-
-        ...storeSettings,
-
-        ...(backup.settings || {})
+        }
 
       };
 
 
-      saveData();
-
-      saveSettings();
-
-
-      location.reload();
-
-    } catch (error) {
-
-      alert(
-        "Invalid backup file."
-      );
-
-      console.error(
-        error
-      );
-
-    }
+    reader.readAsText(file);
 
   };
 
 
-  reader.readAsText(
-    file
-  );
+/* =========================================================
+   ADD PRODUCT BOX
+========================================================= */
 
-};
+window.showAddProduct =
+  function() {
+
+    const box =
+      document.getElementById(
+        "addProductBox"
+      );
+
+
+    if (!box) return;
+
+
+    box.classList.toggle(
+      "hidden"
+    );
+
+  };
 
 
 /* =========================================================
-   SEARCH EVENTS
-   ========================================================= */
+   SEARCH LISTENERS
+========================================================= */
 
-function setupSearch(
-  id,
-  callback
-) {
+function setupSearch() {
 
-  const input =
-    document.getElementById(id);
-
-
-  if (!input) return;
+  const inventorySearch =
+    document.getElementById(
+      "inventorySearch"
+    );
 
 
-  input.addEventListener(
-    "input",
-    callback
-  );
+  if (inventorySearch) {
 
-}
-
-
-/* =========================================================
-   GENERIC GET VALUE
-   ========================================================= */
-
-function getValue(id) {
-
-  const element =
-    document.getElementById(id);
-
-
-  if (!element) {
-
-    return "";
+    inventorySearch.addEventListener(
+      "input",
+      renderInventory
+    );
 
   }
 
 
-  return element.value.trim();
-
-}
-
-
-function setValue(
-  id,
-  value
-) {
-
-  const element =
-    document.getElementById(id);
+  const productSearch =
+    document.getElementById(
+      "productSearch"
+    );
 
 
-  if (element) {
+  if (productSearch) {
 
-    element.value =
-      value ?? "";
+    productSearch.addEventListener(
+      "input",
+      renderPOSProducts
+    );
 
   }
 
-}
+
+  const saleType =
+    document.getElementById(
+      "saleType"
+    );
 
 
-function setText(
-  id,
-  value
-) {
+  if (saleType) {
 
-  const element =
-    document.getElementById(id);
+    saleType.addEventListener(
+      "change",
+      renderPOSProducts
+    );
+
+  }
 
 
-  if (element) {
+  const saleCategory =
+    document.getElementById(
+      "saleCategory"
+    );
 
-    element.textContent =
-      value;
+
+  if (saleCategory) {
+
+    saleCategory.addEventListener(
+      "change",
+      renderPOSProducts
+    );
 
   }
 
@@ -3275,368 +3363,37 @@ function setText(
 
 /* =========================================================
    DOM READY
-   ========================================================= */
+========================================================= */
 
 document.addEventListener(
   "DOMContentLoaded",
   function() {
 
-    /* -----------------------------
-       SETTINGS
-    ----------------------------- */
+    setupStoreSettings();
 
-    const saveSettingsButton =
-      document.getElementById(
-        "saveStoreButton"
-      );
+    setupSearch();
 
+    setupDiscount();
 
-    if (saveSettingsButton) {
+    setupPayment();
 
-      saveSettingsButton.addEventListener(
-        "click",
-        window.saveStoreSettings
-      );
+    loadStoreSettings();
 
-    }
-
-
-    /* -----------------------------
-       ADD PRODUCT
-    ----------------------------- */
-
-    const addProductButton =
-      document.getElementById(
-        "addProductButton"
-      );
-
-
-    if (addProductButton) {
-
-      addProductButton.addEventListener(
-        "click",
-        window.addProduct
-      );
-
-    }
-
-
-    /* -----------------------------
-       POS SEARCH
-    ----------------------------- */
-
-    setupSearch(
-      "productSearch",
-      renderPOSProducts
-    );
-
-
-    const saleType =
-      document.getElementById(
-        "saleType"
-      );
-
-
-    if (saleType) {
-
-      saleType.addEventListener(
-        "change",
-        renderPOSProducts
-      );
-
-    }
-
-
-    const posCategory =
-      document.getElementById(
-        "posCategory"
-      );
-
-
-    if (posCategory) {
-
-      posCategory.addEventListener(
-        "change",
-        renderPOSProducts
-      );
-
-    }
-
-
-    /* -----------------------------
-       DISCOUNT
-    ----------------------------- */
-
-    const discount =
-      document.getElementById(
-        "discount"
-      );
-
-
-    if (discount) {
-
-      discount.addEventListener(
-        "input",
-        renderCart
-      );
-
-    }
-
-
-    /* -----------------------------
-       PAYMENT
-    ----------------------------- */
-
-    const amountPaid =
-      document.getElementById(
-        "amountPaid"
-      );
-
-
-    if (amountPaid) {
-
-      amountPaid.addEventListener(
-        "input",
-        calculateChange
-      );
-
-    }
-
-
-    /* -----------------------------
-       COMPLETE SALE
-    ----------------------------- */
-
-    const completeSaleButton =
-      document.getElementById(
-        "completeSaleButton"
-      );
-
-
-    if (completeSaleButton) {
-
-      completeSaleButton.addEventListener(
-        "click",
-        window.completeSale
-      );
-
-    }
-
-
-    /* -----------------------------
-       INVENTORY SEARCH
-    ----------------------------- */
-
-    setupSearch(
-      "inventorySearch",
-      function() {
-
-        const query =
-          getValue(
-            "inventorySearch"
-          ).toLowerCase();
-
-
-        const container =
-          document.getElementById(
-            "inventoryList"
-          );
-
-
-        if (!container) return;
-
-
-        const filtered =
-          products.filter(
-            function(product) {
-
-              return (
-                product.name
-                  .toLowerCase()
-                  .includes(query) ||
-
-                String(
-                  product.sku
-                )
-                  .toLowerCase()
-                  .includes(query)
-
-              );
-
-            }
-          );
-
-
-        if (
-          filtered.length === 0
-        ) {
-
-          container.innerHTML =
-            `<div class="empty">
-              No products found.
-            </div>`;
-
-          return;
-
-        }
-
-
-        container.innerHTML =
-          filtered.map(
-            function(product) {
-
-              return `
-
-                <div class="product-card">
-
-                  <strong>
-                    ${escapeHTML(
-                      product.name
-                    )}
-                  </strong>
-
-                  <small>
-                    SKU:
-                    ${escapeHTML(
-                      product.sku
-                    )}
-                  </small>
-
-                  <p>
-                    Stock:
-                    ${product.stock}
-                  </p>
-
-                  <p>
-                    Retail:
-                    ${money(
-                      product.retailPrice
-                    )}
-                  </p>
-
-                </div>
-
-              `;
-
-            }
-          ).join("");
-
-      }
-    );
-
-
-    /* -----------------------------
-       CUSTOMER SEARCH
-    ----------------------------- */
-
-    setupSearch(
-      "customerSearch",
-      function() {
-
-        const query =
-          getValue(
-            "customerSearch"
-          ).toLowerCase();
-
-
-        const customers =
-          getCustomers().filter(
-            function(customer) {
-
-              return (
-
-                customer.name
-                  .toLowerCase()
-                  .includes(query) ||
-
-                customer.phone
-                  .toLowerCase()
-                  .includes(query)
-
-              );
-
-            }
-          );
-
-
-        const container =
-          document.getElementById(
-            "customersList"
-          );
-
-
-        if (!container) return;
-
-
-        container.innerHTML =
-          customers.map(
-            function(customer) {
-
-              return `
-
-                <div class="history-card">
-
-                  <h3>
-                    👤
-                    ${escapeHTML(
-                      customer.name
-                    )}
-                  </h3>
-
-                  <p>
-                    ${escapeHTML(
-                      customer.phone
-                    )}
-                  </p>
-
-                  <p>
-                    Purchases:
-                    ${customer.purchases}
-                  </p>
-
-                  <p>
-                    Total:
-                    ${money(
-                      customer.spent
-                    )}
-                  </p>
-
-                </div>
-
-              `;
-
-            }
-          ).join("");
-
-      }
-    );
-
-
-    /* -----------------------------
-       INITIAL RENDER
-    ----------------------------- */
-
-    loadSettingsForm();
-
-    updateStoreTitle();
-
-    updateDashboard();
-
-    renderRecentSales();
+    renderInventory();
 
     renderPOSProducts();
 
     renderCart();
 
-    renderInventory();
-
     renderCustomers();
 
-    renderSales();
+    renderSalesHistory();
 
     renderExpenses();
 
     renderReports();
+
+    updateDashboard();
 
   }
 );
