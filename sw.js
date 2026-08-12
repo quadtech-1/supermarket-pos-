@@ -10,149 +10,60 @@ const FILES_TO_CACHE = [
   "./icon-512.png"
 ];
 
-// ================================
-// INSTALL
-// ================================
-
-self.addEventListener("install", function (event) {
-
+self.addEventListener("install", event => {
   event.waitUntil(
-
-    caches.open(CACHE_NAME)
-      .then(function (cache) {
-
-        return cache.addAll(FILES_TO_CACHE);
-
-      })
-      .catch(function (error) {
-
-        console.error(
-          "Service Worker cache error:",
-          error
-        );
-
-      })
-
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll(FILES_TO_CACHE);
+    })
   );
 
   self.skipWaiting();
-
 });
 
-
-// ================================
-// ACTIVATE
-// ================================
-
-self.addEventListener("activate", function (event) {
-
+self.addEventListener("activate", event => {
   event.waitUntil(
-
-    caches.keys()
-      .then(function (cacheNames) {
-
-        return Promise.all(
-
-          cacheNames
-            .filter(function (cacheName) {
-
-              return cacheName !== CACHE_NAME;
-
-            })
-            .map(function (cacheName) {
-
-              return caches.delete(cacheName);
-
-            })
-
-        );
-
-      })
-
+    caches.keys().then(keys => {
+      return Promise.all(
+        keys
+          .filter(key => key !== CACHE_NAME)
+          .map(key => caches.delete(key))
+      );
+    })
   );
 
   self.clients.claim();
-
 });
 
-
-// ================================
-// FETCH
-// ================================
-
-self.addEventListener("fetch", function (event) {
-
-  // Only handle GET requests
-  if (event.request.method !== "GET") {
-    return;
-  }
+self.addEventListener("fetch", event => {
+  if (event.request.method !== "GET") return;
 
   event.respondWith(
+    caches.match(event.request).then(cachedResponse => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
 
-    caches.match(event.request)
-      .then(function (cachedResponse) {
+      return fetch(event.request)
+        .then(response => {
+          if (
+            !response ||
+            response.status !== 200 ||
+            response.type === "opaque"
+          ) {
+            return response;
+          }
 
-        // Use cached version first
-        if (cachedResponse) {
-          return cachedResponse;
-        }
+          const responseClone = response.clone();
 
-        // Otherwise load from network
-        return fetch(event.request)
-          .then(function (networkResponse) {
-
-            // Save a copy for offline use
-            if (
-              networkResponse &&
-              networkResponse.status === 200 &&
-              networkResponse.type === "basic"
-            ) {
-
-              const responseClone =
-                networkResponse.clone();
-
-              caches.open(CACHE_NAME)
-                .then(function (cache) {
-
-                  cache.put(
-                    event.request,
-                    responseClone
-                  );
-
-                });
-
-            }
-
-            return networkResponse;
-
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseClone);
           });
 
-      })
-      .catch(function () {
-
-        // If offline and page isn't cached
-        return caches.match("./index.html");
-
-      })
-
+          return response;
+        })
+        .catch(() => {
+          return caches.match("./index.html");
+        });
+    })
   );
-
-});
-
-
-// ================================
-// MESSAGE
-// ================================
-
-self.addEventListener("message", function (event) {
-
-  if (
-    event.data &&
-    event.data.type === "SKIP_WAITING"
-  ) {
-
-    self.skipWaiting();
-
-  }
-
 });
