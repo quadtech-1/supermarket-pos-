@@ -1,72 +1,792 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Supermarket POS</title>
-<link rel="stylesheet" href="./style.css">
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  >
+
+  <meta name="theme-color" content="#171a1f">
+
+  <meta
+    name="apple-mobile-web-app-capable"
+    content="yes"
+  >
+
+  <meta
+    name="apple-mobile-web-app-status-bar-style"
+    content="black-translucent"
+  >
+
+  <meta
+    name="apple-mobile-web-app-title"
+    content="My Store"
+  >
+
+  <title>My Store POS</title>
+
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="stylesheet" href="./style.css">
 </head>
+
 <body>
-<div class="app">
-<h1 id="appStoreName">🛒 My Supermarket POS</h1>
-<p class="subtitle">Product, Sales & Inventory Management</p>
 
-<div class="dashboard">
-<div class="card"><span>Total Products</span><strong id="productCount">0</strong></div>
-<div class="card"><span>Today's Sales</span><strong id="salesTotal">₦0</strong></div>
-<div class="card"><span>Low Stock</span><strong id="lowStock">0</strong></div>
+<div class="app-shell">
+
+  <!-- ========================= -->
+  <!-- SIDEBAR -->
+  <!-- ========================= -->
+
+  <aside class="sidebar">
+
+    <div class="brand">
+
+      <div class="brand-icon">🛍️</div>
+
+      <div class="brand-info">
+        <div class="small-label">BUSINESS MANAGER</div>
+        <h1 id="appStoreName">My Store</h1>
+      </div>
+
+      <div class="profile-circle" id="profileLetter">M</div>
+
+    </div>
+
+    <div class="sidebar-line"></div>
+
+    <nav class="side-nav">
+
+      <button
+        class="side-item active"
+        onclick="openPage('homePage', this)"
+      >
+        <span>⌂</span>
+        <strong>Home</strong>
+      </button>
+
+      <button
+        class="side-item"
+        onclick="openPage('productsPage', this)"
+      >
+        <span>◇</span>
+        <strong>Inventory</strong>
+      </button>
+
+      <button
+        class="side-item"
+        onclick="openPage('salePage', this)"
+      >
+        <span>🛒</span>
+        <strong>New Sale</strong>
+      </button>
+
+      <button
+        class="side-item"
+        onclick="openPage('customersPage', this)"
+      >
+        <span>♙</span>
+        <strong>Customers</strong>
+      </button>
+
+      <button
+        class="side-item"
+        onclick="openPage('salesPage', this)"
+      >
+        <span>▥</span>
+        <strong>Sales History</strong>
+      </button>
+
+      <button
+        class="side-item"
+        onclick="openPage('settingsPage', this)"
+      >
+        <span>⚙</span>
+        <strong>Settings</strong>
+      </button>
+
+    </nav>
+
+    <div class="offline-card">
+
+      <div class="offline-dot"></div>
+
+      <div>
+        <strong>Offline Mode</strong>
+        <small>All data is saved locally</small>
+      </div>
+
+      <span class="offline-icon">☁</span>
+
+    </div>
+
+  </aside>
+
+
+  <!-- ========================= -->
+  <!-- MAIN AREA -->
+  <!-- ========================= -->
+
+  <main class="main-area">
+
+
+    <!-- ========================= -->
+    <!-- HOME -->
+    <!-- ========================= -->
+
+    <section
+      id="homePage"
+      class="page active"
+    >
+
+      <div class="desktop-home">
+
+        <!-- DASHBOARD -->
+
+        <div class="dashboard-column">
+
+          <div class="welcome">
+
+            <p>Good day 👋</p>
+
+            <h2>
+              Here's your business overview
+            </h2>
+
+          </div>
+
+
+          <!-- SALES CARD -->
+
+          <div class="sales-card">
+
+            <div>
+              <span>Today's sales</span>
+
+              <strong id="salesTotal">
+                ₦0
+              </strong>
+
+              <small>
+                Sales recorded today
+              </small>
+            </div>
+
+            <div class="sales-icon">
+              ▥
+            </div>
+
+          </div>
+
+
+          <!-- STATS -->
+
+          <div class="stats-grid">
+
+            <div class="stat-card">
+
+              <div class="stat-icon green">
+                ◇
+              </div>
+
+              <div>
+                <span>Products</span>
+
+                <strong id="productCount">
+                  0
+                </strong>
+
+                <small>Total in inventory</small>
+              </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+              <div class="stat-icon orange">
+                ↘
+              </div>
+
+              <div>
+                <span>Low stock</span>
+
+                <strong id="lowStock">
+                  0
+                </strong>
+
+                <small>Items running low</small>
+              </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+              <div class="stat-icon blue">
+                ▤
+              </div>
+
+              <div>
+                <span>Transactions</span>
+
+                <strong id="transactionCount">
+                  0
+                </strong>
+
+                <small>Total sales made</small>
+              </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+              <div class="stat-icon purple">
+                ♟
+              </div>
+
+              <div>
+                <span>Customers</span>
+
+                <strong id="customerCount">
+                  0
+                </strong>
+
+                <small>Total customers</small>
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <button
+            class="record-sale-button"
+            onclick="openPage('salePage')"
+          >
+            🛒 &nbsp; + Record New Sale
+          </button>
+
+
+          <!-- QUICK ACTIONS -->
+
+          <div class="quick-title">
+            <h3>Quick actions</h3>
+          </div>
+
+          <div class="quick-grid">
+
+            <button onclick="openPage('productsPage')">
+              <span class="quick-icon green">◇</span>
+              <strong>Inventory</strong>
+              <small>Manage products</small>
+            </button>
+
+            <button onclick="openPage('salePage')">
+              <span class="quick-icon blue">🛒</span>
+              <strong>New Sale</strong>
+              <small>Make a sale</small>
+            </button>
+
+            <button onclick="openPage('customersPage')">
+              <span class="quick-icon purple">♟</span>
+              <strong>Customers</strong>
+              <small>View customers</small>
+            </button>
+
+            <button onclick="openPage('salesPage')">
+              <span class="quick-icon orange">▥</span>
+              <strong>Sales</strong>
+              <small>View reports</small>
+            </button>
+
+          </div>
+
+        </div>
+
+
+        <!-- DESKTOP SALE PANEL -->
+
+        <div class="sale-panel">
+
+          <div class="panel-title">
+
+            <span class="small-label">
+              SALES
+            </span>
+
+            <h2>New Sale</h2>
+
+          </div>
+
+
+          <input
+            id="homeProductSearch"
+            class="search"
+            type="text"
+            placeholder="⌕  Search product..."
+          >
+
+
+          <select id="homeSaleType">
+
+            <option value="retail">
+              Retail price
+            </option>
+
+            <option value="wholesale">
+              Wholesale price
+            </option>
+
+          </select>
+
+
+          <div
+            id="homeSaleProducts"
+            class="home-sale-products"
+          ></div>
+
+
+          <!-- HOME CART -->
+
+          <div class="home-cart">
+
+            <div class="home-cart-header">
+
+              <strong>Cart</strong>
+
+              <strong id="homeCartTotal">
+                Total: ₦0
+              </strong>
+
+            </div>
+
+            <div
+              id="homeCart"
+              class="home-cart-body"
+            >
+
+              <div class="cart-empty-icon">
+                🛒
+              </div>
+
+              <strong>Your cart is empty</strong>
+
+              <small>
+                Add products to get started
+              </small>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ========================= -->
+    <!-- INVENTORY -->
+    <!-- ========================= -->
+
+    <section
+      id="productsPage"
+      class="page"
+    >
+
+      <div class="page-header">
+
+        <div>
+          <span class="small-label">INVENTORY</span>
+          <h2>Products</h2>
+        </div>
+
+        <button
+          class="small-button"
+          onclick="showAddProduct()"
+        >
+          + Add Product
+        </button>
+
+      </div>
+
+
+      <input
+        id="inventorySearch"
+        class="search"
+        type="text"
+        placeholder="⌕  Search products..."
+      >
+
+
+      <div
+        id="addProductBox"
+        class="form-box hidden"
+      >
+
+        <h3>Add product</h3>
+
+        <input
+          id="productName"
+          placeholder="Product name"
+        >
+
+        <input
+          id="productRetailPrice"
+          type="number"
+          placeholder="Retail price ₦"
+        >
+
+        <input
+          id="productWholesalePrice"
+          type="number"
+          placeholder="Wholesale price ₦"
+        >
+
+        <input
+          id="productStock"
+          type="number"
+          placeholder="Quantity"
+        >
+
+        <button
+          class="primary-action"
+          id="addProductButton"
+        >
+          Save Product
+        </button>
+
+      </div>
+
+
+      <div id="productList"></div>
+
+    </section>
+
+
+    <!-- ========================= -->
+    <!-- NEW SALE -->
+    <!-- ========================= -->
+
+    <section
+      id="salePage"
+      class="page"
+    >
+
+      <div class="page-header">
+
+        <div>
+          <span class="small-label">SALES</span>
+          <h2>New Sale</h2>
+        </div>
+
+      </div>
+
+
+      <input
+        id="productSearch"
+        class="search"
+        placeholder="⌕  Search product..."
+      >
+
+
+      <select id="saleType">
+
+        <option value="retail">
+          Retail price
+        </option>
+
+        <option value="wholesale">
+          Wholesale price
+        </option>
+
+      </select>
+
+
+      <div id="saleProducts"></div>
+
+
+      <div class="cart-box">
+
+        <div class="section-title">
+
+          <h3>Cart</h3>
+
+          <span id="cartTotal">
+            ₦0
+          </span>
+
+        </div>
+
+        <div id="cart">
+          <p class="empty">
+            Cart is empty.
+          </p>
+        </div>
+
+      </div>
+
+
+      <div class="form-box">
+
+        <h3>Customer</h3>
+
+        <input
+          id="customerName"
+          placeholder="Customer name"
+        >
+
+        <input
+          id="customerPhone"
+          type="tel"
+          placeholder="Customer phone"
+        >
+
+      </div>
+
+
+      <div class="form-box">
+
+        <h3>Payment</h3>
+
+        <select id="paymentMethod">
+
+          <option value="Cash">Cash</option>
+
+          <option value="ATM / Card">
+            ATM / Card
+          </option>
+
+          <option value="POS">
+            POS
+          </option>
+
+          <option value="Bank Transfer">
+            Bank Transfer
+          </option>
+
+          <option value="Other">
+            Other
+          </option>
+
+        </select>
+
+        <input
+          id="amountPaid"
+          type="number"
+          placeholder="Amount paid ₦"
+        >
+
+        <div id="changeDisplay"></div>
+
+        <button
+          id="completeSaleButton"
+          class="primary-action"
+        >
+          Complete Sale
+        </button>
+
+      </div>
+
+
+      <div
+        id="receipt"
+        class="receipt"
+      ></div>
+
+    </section>
+
+
+    <!-- ========================= -->
+    <!-- CUSTOMERS -->
+    <!-- ========================= -->
+
+    <section
+      id="customersPage"
+      class="page"
+    >
+
+      <div class="page-header">
+
+        <div>
+          <span class="small-label">CUSTOMERS</span>
+          <h2>Customers</h2>
+        </div>
+
+      </div>
+
+
+      <input
+        id="customerSearch"
+        class="search"
+        placeholder="⌕  Search customer..."
+      >
+
+
+      <div id="customerHistory">
+
+        <p class="empty">
+          Search for a customer to view history.
+        </p>
+
+      </div>
+
+    </section>
+
+
+    <!-- ========================= -->
+    <!-- SALES HISTORY -->
+    <!-- ========================= -->
+
+    <section
+      id="salesPage"
+      class="page"
+    >
+
+      <div class="page-header">
+
+        <div>
+          <span class="small-label">
+            BUSINESS ACTIVITY
+          </span>
+
+          <h2>Sales History</h2>
+        </div>
+
+      </div>
+
+      <div id="salesHistory"></div>
+
+    </section>
+
+
+    <!-- ========================= -->
+    <!-- SETTINGS -->
+    <!-- ========================= -->
+
+    <section
+      id="settingsPage"
+      class="page"
+    >
+
+      <div class="page-header">
+
+        <div>
+          <span class="small-label">BUSINESS</span>
+          <h2>Settings</h2>
+        </div>
+
+      </div>
+
+
+      <div class="form-box">
+
+        <h3>Seller / Business Information</h3>
+
+        <input
+          id="storeName"
+          placeholder="Business / Store name"
+        >
+
+        <input
+          id="ownerName"
+          placeholder="Seller / Owner name"
+        >
+
+        <input
+          id="storePhone"
+          type="tel"
+          placeholder="Phone number"
+        >
+
+        <input
+          id="storeEmail"
+          type="email"
+          placeholder="Email address"
+        >
+
+        <input
+          id="storeAddress"
+          placeholder="Business address"
+        >
+
+        <input
+          id="storeCity"
+          placeholder="City"
+        >
+
+        <button
+          id="saveStoreButton"
+          class="primary-action"
+        >
+          Save Business Information
+        </button>
+
+        <div id="storeSaveMessage"></div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <!-- ========================= -->
+  <!-- MOBILE NAVIGATION -->
+  <!-- ========================= -->
+
+  <nav class="mobile-nav">
+
+    <button
+      class="mobile-nav-item active"
+      onclick="openPage('homePage', this)"
+    >
+      <span>⌂</span>
+      Home
+    </button>
+
+    <button
+      class="mobile-nav-item"
+      onclick="openPage('productsPage', this)"
+    >
+      <span>◇</span>
+      Inventory
+    </button>
+
+    <button
+      class="mobile-sale-button"
+      onclick="openPage('salePage', this)"
+    >
+      +
+    </button>
+
+    <button
+      class="mobile-nav-item"
+      onclick="openPage('customersPage', this)"
+    >
+      <span>♙</span>
+      Customers
+    </button>
+
+    <button
+      class="mobile-nav-item"
+      onclick="openPage('salesPage', this)"
+    >
+      <span>▥</span>
+      Sales
+    </button>
+
+  </nav>
+
 </div>
 
-<div class="section">
-<h2>⚙️ Store Settings</h2>
-<p class="muted">Customize the information that appears on your store and receipts.</p>
-<input id="storeName" type="text" placeholder="Store name e.g. Ayo Supermarket">
-<input id="ownerName" type="text" placeholder="Owner / Business name">
-<input id="storePhone" type="tel" placeholder="Store phone number">
-<input id="storeAddress" type="text" placeholder="Store address">
-<button id="saveStoreButton">💾 Save Store Information</button>
-<div id="storeSaveMessage"></div>
-</div>
 
-<div class="section">
-<h2>➕ Add Product</h2>
-<input id="productName" type="text" placeholder="Product name">
-<input id="productRetailPrice" type="number" placeholder="Retail selling price (₦)">
-<input id="productWholesalePrice" type="number" placeholder="Wholesale selling price (₦)">
-<input id="productStock" type="number" placeholder="Quantity">
-<button id="addProductButton">Add Product</button>
-</div>
-
-<div class="section"><h2>📦 Products</h2><div id="productList"></div></div>
-
-<div class="section">
-<h2>🛒 New Sale</h2>
-<input id="productSearch" type="text" placeholder="🔎 Type product name to find it...">
-<select id="saleType"><option value="retail">Retail Sale</option><option value="wholesale">Wholesale Sale</option></select>
-<div id="saleProducts"></div>
-<h3>🧾 Customer Cart</h3>
-<div id="cart"></div>
-<h2>Total: <span id="cartTotal">₦0</span></h2>
-<input id="customerName" type="text" placeholder="Customer name">
-<input id="customerPhone" type="tel" placeholder="Customer phone number">
-<label for="amountPaid">Amount Paid (₦)</label>
-<input id="amountPaid" type="number" placeholder="Enter amount customer paid">
-<div id="changeDisplay"></div>
-<button id="completeSaleButton">Complete Sale</button>
-<div id="receipt" class="receipt"></div>
-</div>
-
-<div class="section">
-<h2>👥 Customer History</h2>
-<input id="customerSearch" type="text" placeholder="Search customer name or phone...">
-<div id="customerHistory"><p class="muted">Search for a customer to see their purchase history.</p></div>
-</div>
-
-<div class="section">
-<h2>📊 Sales History</h2>
-<div id="salesHistory"><p class="muted">No sales yet.</p></div>
-</div>
-</div>
 <script src="./script.js"></script>
+
 </body>
 </html>
