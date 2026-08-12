@@ -10,60 +10,124 @@ const FILES_TO_CACHE = [
   "./icon-512.png"
 ];
 
-self.addEventListener("install", event => {
+
+// ==========================================
+// INSTALL
+// ==========================================
+
+self.addEventListener("install", function(event) {
+
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
+
+    caches.open(CACHE_NAME).then(function(cache) {
+
       return cache.addAll(FILES_TO_CACHE);
+
     })
+
   );
 
   self.skipWaiting();
+
 });
 
-self.addEventListener("activate", event => {
+
+// ==========================================
+// ACTIVATE
+// ==========================================
+
+self.addEventListener("activate", function(event) {
+
   event.waitUntil(
-    caches.keys().then(keys => {
+
+    caches.keys().then(function(cacheNames) {
+
       return Promise.all(
-        keys
-          .filter(key => key !== CACHE_NAME)
-          .map(key => caches.delete(key))
+
+        cacheNames
+
+          .filter(function(cacheName) {
+
+            return cacheName !== CACHE_NAME;
+
+          })
+
+          .map(function(cacheName) {
+
+            return caches.delete(cacheName);
+
+          })
+
       );
+
     })
+
   );
 
   self.clients.claim();
+
 });
 
-self.addEventListener("fetch", event => {
-  if (event.request.method !== "GET") return;
+
+// ==========================================
+// FETCH
+// ==========================================
+
+self.addEventListener("fetch", function(event) {
+
+  // Only handle GET requests
+  if (event.request.method !== "GET") {
+    return;
+  }
 
   event.respondWith(
-    caches.match(event.request).then(cachedResponse => {
+
+    caches.match(event.request).then(function(cachedResponse) {
+
       if (cachedResponse) {
         return cachedResponse;
       }
 
       return fetch(event.request)
-        .then(response => {
+
+        .then(function(networkResponse) {
+
+          // Save successful requests for offline use
           if (
-            !response ||
-            response.status !== 200 ||
-            response.type === "opaque"
+            networkResponse &&
+            networkResponse.status === 200 &&
+            networkResponse.type === "basic"
           ) {
-            return response;
+
+            const responseClone =
+              networkResponse.clone();
+
+            caches.open(CACHE_NAME).then(function(cache) {
+
+              cache.put(
+                event.request,
+                responseClone
+              );
+
+            });
+
           }
 
-          const responseClone = response.clone();
+          return networkResponse;
 
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseClone);
-          });
-
-          return response;
         })
-        .catch(() => {
+
+        .catch(function() {
+
+          // If the page was previously cached,
+          // return the main app as a fallback.
+
           return caches.match("./index.html");
+
         });
+
     })
+
   );
+
 });
