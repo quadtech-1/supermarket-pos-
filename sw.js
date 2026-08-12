@@ -10,124 +10,40 @@ const FILES_TO_CACHE = [
   "./icon-512.png"
 ];
 
-
-// ==========================================
-// INSTALL
-// ==========================================
-
 self.addEventListener("install", function(event) {
-
   event.waitUntil(
-
     caches.open(CACHE_NAME).then(function(cache) {
-
       return cache.addAll(FILES_TO_CACHE);
-
     })
-
   );
 
   self.skipWaiting();
-
 });
 
-
-// ==========================================
-// ACTIVATE
-// ==========================================
-
 self.addEventListener("activate", function(event) {
-
   event.waitUntil(
-
-    caches.keys().then(function(cacheNames) {
-
+    caches.keys().then(function(keys) {
       return Promise.all(
-
-        cacheNames
-
-          .filter(function(cacheName) {
-
-            return cacheName !== CACHE_NAME;
-
-          })
-
-          .map(function(cacheName) {
-
-            return caches.delete(cacheName);
-
-          })
-
+        keys.map(function(key) {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
       );
-
     })
-
   );
 
   self.clients.claim();
-
 });
 
-
-// ==========================================
-// FETCH
-// ==========================================
-
 self.addEventListener("fetch", function(event) {
-
-  // Only handle GET requests
-  if (event.request.method !== "GET") {
-    return;
-  }
-
   event.respondWith(
-
     caches.match(event.request).then(function(cachedResponse) {
-
       if (cachedResponse) {
         return cachedResponse;
       }
 
-      return fetch(event.request)
-
-        .then(function(networkResponse) {
-
-          // Save successful requests for offline use
-          if (
-            networkResponse &&
-            networkResponse.status === 200 &&
-            networkResponse.type === "basic"
-          ) {
-
-            const responseClone =
-              networkResponse.clone();
-
-            caches.open(CACHE_NAME).then(function(cache) {
-
-              cache.put(
-                event.request,
-                responseClone
-              );
-
-            });
-
-          }
-
-          return networkResponse;
-
-        })
-
-        .catch(function() {
-
-          // If the page was previously cached,
-          // return the main app as a fallback.
-
-          return caches.match("./index.html");
-
-        });
-
+      return fetch(event.request);
     })
-
   );
-
 });
