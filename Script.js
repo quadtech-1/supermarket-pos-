@@ -1,12 +1,13 @@
 /* =========================================================
    MY STORE POS — V2 SCRIPT
-   ========================================================= */
+   Works with the V2 index.html
+========================================================= */
 
 "use strict";
 
 /* =========================================================
    DATA
-   ========================================================= */
+========================================================= */
 
 let products = [];
 let sales = [];
@@ -20,57 +21,71 @@ let storeSettings = {
   email: "",
   address: "",
   city: "",
-  currency: "₦"
+  receiptFooter: "Thank you for shopping with us!",
+  defaultSaleType: "retail"
 };
 
+
 /* =========================================================
-   LOAD DATA
-   ========================================================= */
+   STORAGE HELPERS
+========================================================= */
 
 function loadJSON(key, fallback) {
   try {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : fallback;
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
   } catch (error) {
-    console.error("Could not load:", key, error);
+    console.error("Storage error:", key, error);
     return fallback;
   }
 }
 
-products = loadJSON("posProducts", []);
-sales = loadJSON("posSales", []);
-expenses = loadJSON("posExpenses", []);
-storeSettings = {
-  ...storeSettings,
-  ...loadJSON("posStoreSettings", {})
-};
-
-/* =========================================================
-   SAVE DATA
-   ========================================================= */
-
-function saveData() {
-  localStorage.setItem("posProducts", JSON.stringify(products));
-  localStorage.setItem("posSales", JSON.stringify(sales));
-  localStorage.setItem("posExpenses", JSON.stringify(expenses));
+function saveJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error("Could not save:", key, error);
+  }
 }
 
-function saveStoreSettings() {
-  localStorage.setItem(
-    "posStoreSettings",
-    JSON.stringify(storeSettings)
-  );
+function loadAllData() {
+  products = loadJSON("posProducts", []);
+  sales = loadJSON("posSales", []);
+  expenses = loadJSON("posExpenses", []);
+
+  const savedSettings =
+    loadJSON("posStoreSettings", null);
+
+  if (savedSettings) {
+    storeSettings = {
+      ...storeSettings,
+      ...savedSettings
+    };
+  }
 }
+
+function saveAllData() {
+  saveJSON("posProducts", products);
+  saveJSON("posSales", sales);
+  saveJSON("posExpenses", expenses);
+  saveJSON("posStoreSettings", storeSettings);
+}
+
 
 /* =========================================================
    HELPERS
-   ========================================================= */
+========================================================= */
 
 function money(value) {
-  return (
-    storeSettings.currency +
-    Number(value || 0).toLocaleString()
-  );
+  return "₦" + Number(value || 0).toLocaleString();
+}
+
+function todayString() {
+  return new Date().toDateString();
+}
+
+function isToday(date) {
+  return new Date(date).toDateString() === todayString();
 }
 
 function escapeHTML(value) {
@@ -82,76 +97,95 @@ function escapeHTML(value) {
     .replace(/'/g, "&#039;");
 }
 
-function todayString() {
-  return new Date().toDateString();
+function getProductCost(product) {
+  return Number(product.costPrice || 0);
 }
 
-function getTodaySales() {
-  return sales.filter(function (sale) {
-    return new Date(sale.date).toDateString() === todayString();
-  });
-}
-
-function getRevenue() {
-  return sales.reduce(function (sum, sale) {
-    return sum + Number(sale.total || 0);
+function getSaleCost(sale) {
+  return (sale.items || []).reduce(function(total, item) {
+    return total +
+      Number(item.costPrice || 0) *
+      Number(item.quantity || 0);
   }, 0);
 }
 
-function getCost() {
-  return sales.reduce(function (sum, sale) {
-    return (
-      sum +
-      (sale.items || []).reduce(function (itemSum, item) {
-        return (
-          itemSum +
-          Number(item.costPrice || 0) *
-            Number(item.quantity || 0)
-        );
-      }, 0)
-    );
-  }, 0);
+function getSaleProfit(sale) {
+  return Number(sale.total || 0) - getSaleCost(sale);
 }
 
-function getGrossProfit() {
-  return getRevenue() - getCost();
+function getTodayRevenue() {
+  return sales
+    .filter(sale => isToday(sale.date))
+    .reduce((total, sale) => {
+      return total + Number(sale.total || 0);
+    }, 0);
 }
 
-function getExpenseTotal() {
-  return expenses.reduce(function (sum, expense) {
-    return sum + Number(expense.amount || 0);
-  }, 0);
+function getTodayCost() {
+  return sales
+    .filter(sale => isToday(sale.date))
+    .reduce((total, sale) => {
+      return total + getSaleCost(sale);
+    }, 0);
 }
 
-function getNetProfit() {
-  return getGrossProfit() - getExpenseTotal();
+function getTodayExpenses() {
+  return expenses
+    .filter(expense => {
+      const date = expense.date
+        ? new Date(expense.date + "T00:00:00")
+        : new Date(expense.createdAt);
+
+      return date.toDateString() === todayString();
+    })
+    .reduce((total, expense) => {
+      return total + Number(expense.amount || 0);
+    }, 0);
 }
+
 
 /* =========================================================
    NAVIGATION
-   ========================================================= */
+========================================================= */
 
-window.openPage = function (pageId, button) {
-  document.querySelectorAll(".page").forEach(function (page) {
+window.openPage = function(pageId, clickedButton) {
+
+  document.querySelectorAll(".page").forEach(function(page) {
     page.classList.remove("active");
   });
 
   const page = document.getElementById(pageId);
 
-  if (page) {
-    page.classList.add("active");
-  }
+  if (!page) return;
+
+  page.classList.add("active");
 
   document
-    .querySelectorAll(
-      ".side-item, .mobile-nav-item, .nav-item"
-    )
-    .forEach(function (item) {
-      item.classList.remove("active");
+    .querySelectorAll(".side-item, .mobile-nav-item")
+    .forEach(function(button) {
+      button.classList.remove("active");
     });
 
-  if (button) {
-    button.classList.add("active");
+  const titleMap = {
+    homePage: "Dashboard",
+    posPage: "Point of Sale",
+    inventoryPage: "Inventory",
+    customersPage: "Customers",
+    salesPage: "Sales History",
+    expensesPage: "Expenses",
+    reportsPage: "Reports",
+    settingsPage: "Settings"
+  };
+
+  const title = document.getElementById("pageTitle");
+
+  if (title) {
+    title.textContent =
+      titleMap[pageId] || "Dashboard";
+  }
+
+  if (clickedButton) {
+    clickedButton.classList.add("active");
   }
 
   window.scrollTo({
@@ -159,143 +193,302 @@ window.openPage = function (pageId, button) {
     behavior: "smooth"
   });
 
-  refreshCurrentPage(pageId);
-};
+  if (pageId === "homePage") {
+    renderDashboard();
+  }
 
-function refreshCurrentPage(pageId) {
-  switch (pageId) {
-    case "homePage":
-      renderDashboard();
-      renderRecentSales();
-      break;
+  if (pageId === "posPage") {
+    renderSaleProducts();
+    renderCart();
+  }
 
-    case "posPage":
-      renderPOSProducts();
-      renderCart();
-      break;
+  if (pageId === "inventoryPage") {
+    showProducts();
+  }
 
-    case "inventoryPage":
-      renderInventory();
-      break;
+  if (pageId === "salesPage") {
+    showSalesHistory();
+    showTodaySales();
+  }
 
-    case "customersPage":
-      renderCustomers();
-      break;
+  if (pageId === "expensesPage") {
+    showExpenses();
+  }
 
-    case "salesPage":
-      renderSales();
-      break;
-
-    case "expensesPage":
-      renderExpenses();
-      break;
-
-    case "reportsPage":
-      renderReports();
-      break;
-
-    case "settingsPage":
-      loadSettingsForm();
-      break;
+  if (pageId === "reportsPage") {
+    renderReports();
   }
 };
+
 
 /* =========================================================
-   PRODUCT MANAGEMENT
-   ========================================================= */
+   STORE SETTINGS
+========================================================= */
 
-function addProduct(data) {
-  const product = {
-    id: Date.now(),
-    name: data.name,
-    category: data.category || "General",
-    sku: data.sku || "",
-    costPrice: Number(data.costPrice || 0),
-    retailPrice: Number(data.retailPrice || 0),
-    wholesalePrice: Number(data.wholesalePrice || 0),
-    stock: Number(data.stock || 0),
-    lowStock: Number(data.lowStock || 5)
-  };
+function updateStoreTitle() {
 
-  products.push(product);
-  saveData();
+  const title =
+    document.getElementById("appStoreName");
 
-  renderInventory();
-  renderPOSProducts();
-  renderDashboard();
+  const letter =
+    document.getElementById("profileLetter");
+
+  const profileName =
+    document.querySelector(".sidebar-profile strong");
+
+  const name =
+    storeSettings.storeName || "My Store";
+
+  if (title) {
+    title.textContent = name;
+  }
+
+  if (letter) {
+    letter.textContent =
+      name.charAt(0).toUpperCase();
+  }
+
+  if (profileName) {
+    profileName.textContent = name;
+  }
+
+  document.title = name + " POS";
 }
 
-window.deleteProduct = function (index) {
-  const product = products[index];
+function loadStoreSettings() {
 
-  if (!product) return;
+  const fields = {
+    storeName: storeSettings.storeName,
+    ownerName: storeSettings.ownerName,
+    storePhone: storeSettings.phone,
+    storeEmail: storeSettings.email,
+    storeAddress: storeSettings.address,
+    storeCity: storeSettings.city,
+    receiptFooter: storeSettings.receiptFooter,
+    defaultSaleType: storeSettings.defaultSaleType
+  };
 
-  if (
-    !confirm(
-      'Delete "' + product.name + '" from inventory?'
-    )
-  ) {
-    return;
+  Object.keys(fields).forEach(function(id) {
+
+    const element =
+      document.getElementById(id);
+
+    if (element) {
+      element.value =
+        fields[id] || "";
+    }
+  });
+
+  updateStoreTitle();
+}
+
+function setupSettings() {
+
+  const saveButton =
+    document.getElementById("saveStoreButton");
+
+  if (!saveButton) return;
+
+  saveButton.addEventListener("click", function() {
+
+    const storeName =
+      document.getElementById("storeName");
+
+    if (!storeName || !storeName.value.trim()) {
+      alert("Please enter a business name.");
+      return;
+    }
+
+    storeSettings.storeName =
+      storeName.value.trim();
+
+    storeSettings.ownerName =
+      document.getElementById("ownerName")?.value.trim() || "";
+
+    storeSettings.phone =
+      document.getElementById("storePhone")?.value.trim() || "";
+
+    storeSettings.email =
+      document.getElementById("storeEmail")?.value.trim() || "";
+
+    storeSettings.address =
+      document.getElementById("storeAddress")?.value.trim() || "";
+
+    storeSettings.city =
+      document.getElementById("storeCity")?.value.trim() || "";
+
+    storeSettings.receiptFooter =
+      document.getElementById("receiptFooter")?.value.trim() ||
+      "Thank you for shopping with us!";
+
+    storeSettings.defaultSaleType =
+      document.getElementById("defaultSaleType")?.value ||
+      "retail";
+
+    saveAllData();
+    updateStoreTitle();
+
+    const message =
+      document.getElementById("storeSaveMessage");
+
+    if (message) {
+      message.textContent =
+        "✅ Business information saved.";
+
+      setTimeout(function() {
+        message.textContent = "";
+      }, 3000);
+    }
+
+    alert("Business information saved.");
+  });
+}
+
+
+/* =========================================================
+   PRODUCTS
+========================================================= */
+
+function setupProductForm() {
+
+  const button =
+    document.getElementById("addProductButton");
+
+  if (!button) return;
+
+  button.addEventListener("click", function() {
+
+    const name =
+      document.getElementById("productName")?.value.trim();
+
+    const sku =
+      document.getElementById("productSKU")?.value.trim();
+
+    const category =
+      document.getElementById("productCategory")?.value.trim();
+
+    const costPrice =
+      Number(
+        document.getElementById("productCostPrice")?.value
+      );
+
+    const retailPrice =
+      Number(
+        document.getElementById("productRetailPrice")?.value
+      );
+
+    const wholesalePrice =
+      Number(
+        document.getElementById("productWholesalePrice")?.value
+      );
+
+    const stock =
+      Number(
+        document.getElementById("productStock")?.value
+      );
+
+    if (!name) {
+      alert("Please enter product name.");
+      return;
+    }
+
+    if (retailPrice <= 0) {
+      alert("Please enter a valid retail price.");
+      return;
+    }
+
+    if (wholesalePrice <= 0) {
+      alert("Please enter a valid wholesale price.");
+      return;
+    }
+
+    if (isNaN(stock) || stock < 0) {
+      alert("Please enter a valid stock quantity.");
+      return;
+    }
+
+    if (products.some(function(product) {
+      return sku &&
+        String(product.sku || "").toLowerCase() ===
+        sku.toLowerCase();
+    })) {
+      alert("That SKU already exists.");
+      return;
+    }
+
+    products.push({
+      id: Date.now(),
+      name: name,
+      sku: sku,
+      category: category,
+      costPrice: costPrice || 0,
+      retailPrice: retailPrice,
+      wholesalePrice: wholesalePrice,
+      stock: stock,
+      createdAt: new Date().toISOString()
+    });
+
+    saveAllData();
+
+    [
+      "productName",
+      "productSKU",
+      "productCategory",
+      "productCostPrice",
+      "productRetailPrice",
+      "productWholesalePrice",
+      "productStock"
+    ].forEach(function(id) {
+      const input = document.getElementById(id);
+      if (input) input.value = "";
+    });
+
+    showProducts();
+    renderSaleProducts();
+    renderDashboard();
+
+    alert("✅ Product added successfully.");
+  });
+}
+
+function productHTML(product, index) {
+
+  const stock =
+    Number(product.stock || 0);
+
+  let stockClass = "good";
+  let stockText = "🟢 In stock";
+
+  if (stock <= 0) {
+    stockClass = "low";
+    stockText = "🔴 Out of stock";
+  } else if (stock <= 5) {
+    stockClass = "low";
+    stockText = "🟠 Low stock";
   }
 
-  products.splice(index, 1);
+  return `
+    <div class="product-card">
 
-  saveData();
+      <div class="product-top">
 
-  renderInventory();
-  renderPOSProducts();
-  renderDashboard();
-};
+        <div>
 
-function renderInventory() {
-  const list =
-    document.getElementById("productList") ||
-    document.getElementById("inventoryList");
-
-  if (!list) return;
-
-  if (!products.length) {
-    list.innerHTML =
-      '<div class="empty">No products yet.</div>';
-    return;
-  }
-
-  list.innerHTML = products
-    .map(function (product, index) {
-      const stock = Number(product.stock);
-
-      let status = "In stock";
-
-      if (stock <= 0) {
-        status = "Out of stock";
-      } else if (stock <= Number(product.lowStock || 5)) {
-        status = "Low stock";
-      }
-
-      return `
-        <div class="product-card">
-
-          <div class="product-top">
-            <div>
-              <strong>
-                ${escapeHTML(product.name)}
-              </strong>
-
-              <small>
-                ${escapeHTML(product.category)}
-              </small>
-
-              ${
-                product.sku
-                  ? `<small>SKU: ${escapeHTML(product.sku)}</small>`
-                  : ""
-              }
-            </div>
-
-            <strong>
-              ${stock}
-            </strong>
+          <div class="product-name">
+            ${escapeHTML(product.name)}
           </div>
+
+          ${
+            product.category
+              ? `<small>Category: ${escapeHTML(product.category)}</small>`
+              : ""
+          }
+
+          ${
+            product.sku
+              ? `<small>SKU: ${escapeHTML(product.sku)}</small>`
+              : ""
+          }
 
           <div class="product-price">
             Cost: ${money(product.costPrice)}
@@ -309,95 +502,222 @@ function renderInventory() {
             Wholesale: ${money(product.wholesalePrice)}
           </div>
 
-          <div class="stock">
-            ${status}
-          </div>
-
-          <button
-            type="button"
-            onclick="deleteProduct(${index})"
-          >
-            🗑 Delete
-          </button>
-
         </div>
-      `;
-    })
-    .join("");
+
+        <strong>
+          ${stock}
+        </strong>
+
+      </div>
+
+      <div class="stock ${stockClass}">
+        ${stockText}
+      </div>
+
+      <br>
+
+      <button
+        onclick="deleteProduct(${index})"
+        style="
+          background:#dc2626;
+          color:white;
+          border:0;
+          padding:9px 12px;
+          border-radius:8px;
+          cursor:pointer;
+        "
+      >
+        🗑️ Delete
+      </button>
+
+    </div>
+  `;
 }
 
-/* =========================================================
-   POS PRODUCTS
-   ========================================================= */
+function showProducts(listData) {
 
-function renderPOSProducts() {
-  const box =
-    document.getElementById("saleProducts") ||
-    document.getElementById("posProducts") ||
-    document.getElementById("homeSaleProducts");
+  const list =
+    document.getElementById("productList");
 
-  if (!box) return;
+  if (!list) return;
 
-  const searchInput =
-    document.getElementById("productSearch") ||
-    document.getElementById("homeProductSearch");
+  const data =
+    Array.isArray(listData)
+      ? listData
+      : products;
 
-  const search = searchInput
-    ? searchInput.value.trim().toLowerCase()
-    : "";
+  if (data.length === 0) {
 
-  const filtered = products.filter(function (product) {
-    return product.name.toLowerCase().includes(search);
-  });
+    list.innerHTML =
+      '<p class="empty">No products added yet.</p>';
 
-  if (!filtered.length) {
-    box.innerHTML =
-      '<div class="empty">No products found.</div>';
     return;
   }
 
-  box.innerHTML = filtered
-    .map(function (product) {
-      const index = products.indexOf(product);
+  list.innerHTML =
+    data.map(function(product) {
 
-      const disabled =
-        Number(product.stock) <= 0
-          ? "disabled"
-          : "";
+      const index =
+        products.indexOf(product);
+
+      return productHTML(
+        product,
+        index
+      );
+
+    }).join("");
+}
+
+window.deleteProduct = function(index) {
+
+  const product = products[index];
+
+  if (!product) return;
+
+  if (!confirm(`Delete "${product.name}"?`)) {
+    return;
+  }
+
+  products.splice(index, 1);
+
+  cart = cart.filter(function(item) {
+    return item.index !== index;
+  });
+
+  saveAllData();
+
+  showProducts();
+  renderSaleProducts();
+  renderCart();
+  renderDashboard();
+};
+
+
+/* =========================================================
+   ADD PRODUCT BOX
+========================================================= */
+
+window.showAddProduct = function() {
+
+  const box =
+    document.getElementById("addProductBox");
+
+  if (!box) return;
+
+  box.classList.toggle("hidden");
+
+  if (!box.classList.contains("hidden")) {
+    box.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+  }
+};
+
+
+/* =========================================================
+   POS PRODUCTS
+========================================================= */
+
+function getSaleType() {
+
+  const select =
+    document.getElementById("saleType");
+
+  return select
+    ? select.value
+    : storeSettings.defaultSaleType || "retail";
+}
+
+function renderSaleProducts() {
+
+  const box =
+    document.getElementById("saleProducts");
+
+  if (!box) return;
+
+  const search =
+    document.getElementById("productSearch")
+      ?.value.trim().toLowerCase() || "";
+
+  const type =
+    getSaleType();
+
+  const results =
+    products.filter(function(product) {
+
+      return (
+        product.name.toLowerCase().includes(search) ||
+        String(product.sku || "")
+          .toLowerCase()
+          .includes(search) ||
+        String(product.category || "")
+          .toLowerCase()
+          .includes(search)
+      );
+
+    });
+
+  if (results.length === 0) {
+
+    box.innerHTML =
+      '<p class="empty">No matching products found.</p>';
+
+    return;
+  }
+
+  box.innerHTML =
+    results.map(function(product) {
+
+      const index =
+        products.indexOf(product);
+
+      const price =
+        type === "wholesale"
+          ? Number(product.wholesalePrice || 0)
+          : Number(product.retailPrice || 0);
+
+      const outOfStock =
+        Number(product.stock) <= 0;
 
       return `
         <div class="sale-product">
 
           <div class="sale-product-info">
+
             <strong>
               ${escapeHTML(product.name)}
             </strong>
 
             <small>
-              ${money(product.retailPrice)}
+              ${money(price)}
               • Stock: ${product.stock}
             </small>
+
+            ${
+              product.category
+                ? `<small>${escapeHTML(product.category)}</small>`
+                : ""
+            }
+
           </div>
 
           <button
-            type="button"
+            class="add-button"
             onclick="addToCart(${index})"
-            ${disabled}
+            ${outOfStock ? "disabled" : ""}
           >
-            ${
-              Number(product.stock) <= 0
-                ? "Out of Stock"
-                : "+ Add"
-            }
+            ${outOfStock ? "Out of Stock" : "+ Add"}
           </button>
 
         </div>
       `;
-    })
-    .join("");
+
+    }).join("");
 }
 
-window.addToCart = function (index) {
+window.addToCart = function(index) {
+
   const product = products[index];
 
   if (!product) return;
@@ -407,57 +727,110 @@ window.addToCart = function (index) {
     return;
   }
 
-  const existing = cart.find(function (item) {
-    return item.productId === product.id;
-  });
+  addProductToCart(index, getSaleType());
+};
+
+function addProductToCart(index, type) {
+
+  const product =
+    products[index];
+
+  if (!product) return;
+
+  const price =
+    type === "wholesale"
+      ? Number(product.wholesalePrice || 0)
+      : Number(product.retailPrice || 0);
+
+  const existing =
+    cart.find(function(item) {
+      return (
+        item.productId === product.id &&
+        item.type === type
+      );
+    });
 
   if (existing) {
-    if (existing.quantity >= product.stock) {
+
+    if (
+      existing.quantity >=
+      Number(product.stock)
+    ) {
       alert("Not enough stock.");
       return;
     }
 
     existing.quantity++;
+
   } else {
+
     cart.push({
       productId: product.id,
+      index: index,
       name: product.name,
-      price: Number(product.retailPrice),
-      costPrice: Number(product.costPrice),
+      price: price,
+      costPrice: Number(product.costPrice || 0),
       quantity: 1,
+      type: type,
       discount: 0
     });
   }
 
   renderCart();
-};
+}
+
 
 /* =========================================================
    CART
-   ========================================================= */
+========================================================= */
 
-function getCartTotal() {
-  return cart.reduce(function (total, item) {
-    const subtotal =
-      Number(item.price) * Number(item.quantity);
+function getCartSubtotal() {
 
-    return total + subtotal - Number(item.discount || 0);
+  return cart.reduce(function(total, item) {
+
+    return total +
+      Number(item.price) *
+      Number(item.quantity);
+
   }, 0);
 }
 
+function getCartDiscount() {
+
+  return cart.reduce(function(total, item) {
+
+    return total +
+      Number(item.discount || 0);
+
+  }, 0);
+}
+
+function getCartTotal() {
+
+  return Math.max(
+    0,
+    getCartSubtotal() -
+    getCartDiscount()
+  );
+}
+
 function renderCart() {
+
   const box =
-    document.getElementById("cart") ||
-    document.getElementById("posCart");
+    document.getElementById("cart");
 
   if (!box) return;
 
-  if (!cart.length) {
+  if (cart.length === 0) {
+
     box.innerHTML =
-      '<div class="empty">Cart is empty.</div>';
+      '<p class="empty">Cart is empty.</p>';
+
   } else {
-    box.innerHTML = cart
-      .map(function (item, index) {
+
+    box.innerHTML =
+      cart.map(function(item, index) {
+
         const subtotal =
           Number(item.price) *
           Number(item.quantity);
@@ -466,6 +839,7 @@ function renderCart() {
           <div class="cart-item">
 
             <div class="cart-row">
+
               <strong>
                 ${escapeHTML(item.name)}
               </strong>
@@ -473,34 +847,35 @@ function renderCart() {
               <strong>
                 ${money(subtotal)}
               </strong>
+
             </div>
 
             <small>
-              ${money(item.price)} × ${item.quantity}
+              ${item.type === "wholesale"
+                ? "Wholesale"
+                : "Retail"}
+              • ${money(item.price)}
             </small>
 
             <div class="quantity-controls">
 
               <button
-                type="button"
                 onclick="decreaseQuantity(${index})"
               >
                 −
               </button>
 
-              <span>
+              <button>
                 ${item.quantity}
-              </span>
+              </button>
 
               <button
-                type="button"
                 onclick="increaseQuantity(${index})"
               >
                 +
               </button>
 
               <button
-                type="button"
                 onclick="removeFromCart(${index})"
               >
                 Remove
@@ -508,44 +883,85 @@ function renderCart() {
 
             </div>
 
+            <div style="margin-top:8px;">
+              <input
+                type="number"
+                min="0"
+                value="${Number(item.discount || 0)}"
+                placeholder="Discount"
+                onchange="setItemDiscount(${index}, this.value)"
+                style="width:100%;"
+              >
+            </div>
+
           </div>
         `;
-      })
-      .join("");
+
+      }).join("");
   }
 
-  const totalElement =
-    document.getElementById("cartTotal") ||
-    document.getElementById("homeCartTotal");
+  const total =
+    document.getElementById("cartTotal");
 
-  if (totalElement) {
-    totalElement.textContent = money(getCartTotal());
+  if (total) {
+    total.textContent =
+      money(getCartTotal());
   }
 
   calculateChange();
 }
 
-window.increaseQuantity = function (index) {
+window.setItemDiscount = function(index, value) {
+
   const item = cart[index];
 
   if (!item) return;
 
-  const product = products.find(function (p) {
-    return p.id === item.productId;
-  });
+  let discount = Number(value || 0);
+
+  const maximum =
+    Number(item.price) *
+    Number(item.quantity);
+
+  if (discount < 0) discount = 0;
+
+  if (discount > maximum) {
+    discount = maximum;
+  }
+
+  item.discount = discount;
+
+  renderCart();
+};
+
+window.increaseQuantity = function(index) {
+
+  const item = cart[index];
+
+  if (!item) return;
+
+  const product =
+    products.find(function(p) {
+      return p.id === item.productId;
+    });
 
   if (!product) return;
 
-  if (item.quantity >= product.stock) {
+  if (
+    item.quantity >=
+    Number(product.stock)
+  ) {
     alert("Not enough stock.");
     return;
   }
 
   item.quantity++;
+
   renderCart();
 };
 
-window.decreaseQuantity = function (index) {
+window.decreaseQuantity = function(index) {
+
   const item = cart[index];
 
   if (!item) return;
@@ -559,609 +975,259 @@ window.decreaseQuantity = function (index) {
   renderCart();
 };
 
-window.removeFromCart = function (index) {
+window.removeFromCart = function(index) {
+
+  if (!cart[index]) return;
+
   cart.splice(index, 1);
+
   renderCart();
 };
 
-/* =========================================================
-   COMPLETE SALE
-   ========================================================= */
-
-window.completeSale = function () {
-  if (!cart.length) {
-    alert("Your cart is empty.");
-    return;
-  }
-
-  const customerName =
-    getValue("customerName");
-
-  const customerPhone =
-    getValue("customerPhone");
-
-  const amountPaid =
-    Number(getValue("amountPaid") || 0);
-
-  const paymentMethod =
-    getValue("paymentMethod") || "Cash";
-
-  const total = getCartTotal();
-
-  if (amountPaid < total) {
-    alert(
-      "Amount paid is not enough.\n\nTotal: " +
-        money(total)
-    );
-    return;
-  }
-
-  const change = amountPaid - total;
-
-  cart.forEach(function (item) {
-    const product = products.find(function (p) {
-      return p.id === item.productId;
-    });
-
-    if (product) {
-      product.stock -= item.quantity;
-
-      if (product.stock < 0) {
-        product.stock = 0;
-      }
-    }
-  });
-
-  const sale = {
-    id: Date.now(),
-    date: new Date().toISOString(),
-    customerName:
-      customerName || "Walk-in Customer",
-    customerPhone,
-    paymentMethod,
-    items: cart.map(function (item) {
-      return {
-        name: item.name,
-        price: item.price,
-        costPrice: item.costPrice,
-        quantity: item.quantity,
-        discount: item.discount || 0
-      };
-    }),
-    total,
-    paid: amountPaid,
-    change,
-    profit: cart.reduce(function (sum, item) {
-      return (
-        sum +
-        (Number(item.price) -
-          Number(item.costPrice || 0)) *
-          Number(item.quantity)
-      );
-    }, 0)
-  };
-
-  sales.unshift(sale);
-
-  saveData();
-
-  cart = [];
-
-  clearInput("customerName");
-  clearInput("customerPhone");
-  clearInput("amountPaid");
-
-  renderCart();
-  renderInventory();
-  renderPOSProducts();
-  renderDashboard();
-  renderSales();
-  renderCustomers();
-  renderReports();
-
-  showReceipt(sale);
-
-  alert("✅ Sale completed successfully.");
-};
-
-const completeSaleButton =
-  document.getElementById("completeSaleButton");
-
-if (completeSaleButton) {
-  completeSaleButton.addEventListener(
-    "click",
-    window.completeSale
-  );
-}
 
 /* =========================================================
-   PAYMENT / CHANGE
-   ========================================================= */
+   PAYMENT
+========================================================= */
 
 function calculateChange() {
-  const box =
+
+  const display =
     document.getElementById("changeDisplay");
 
-  if (!box) return;
+  if (!display) return;
+
+  const total =
+    getCartTotal();
 
   const paid =
-    Number(getValue("amountPaid") || 0);
+    Number(
+      document.getElementById("amountPaid")?.value || 0
+    );
 
-  const total = getCartTotal();
-
-  if (!paid || !total) {
-    box.innerHTML = "";
+  if (!total || !paid) {
+    display.innerHTML = "";
     return;
   }
 
   if (paid < total) {
-    box.innerHTML = `
-      <strong>
-        Amount remaining: ${money(total - paid)}
+
+    display.innerHTML = `
+      <strong style="color:#dc2626;">
+        Amount remaining:
+        ${money(total - paid)}
       </strong>
     `;
+
   } else {
-    box.innerHTML = `
-      <strong>
-        Change: ${money(paid - total)}
+
+    display.innerHTML = `
+      <strong style="color:#168344;">
+        Change:
+        ${money(paid - total)}
       </strong>
     `;
   }
 }
 
+
 /* =========================================================
-   CUSTOMERS
-   ========================================================= */
+   COMPLETE SALE
+========================================================= */
 
-function getCustomers() {
-  const map = {};
+function setupCompleteSale() {
 
-  sales.forEach(function (sale) {
-    const key =
-      sale.customerPhone ||
-      sale.customerName ||
-      "Walk-in Customer";
+  const button =
+    document.getElementById("completeSaleButton");
 
-    if (!map[key]) {
-      map[key] = {
-        name:
-          sale.customerName ||
-          "Walk-in Customer",
-        phone:
-          sale.customerPhone || "",
-        purchases: 0,
-        spent: 0
-      };
+  if (!button) return;
+
+  button.addEventListener("click", function() {
+
+    if (cart.length === 0) {
+      alert("Your cart is empty.");
+      return;
     }
 
-    map[key].purchases++;
-    map[key].spent += Number(sale.total || 0);
-  });
-
-  return Object.values(map);
-}
-
-function renderCustomers() {
-  const box =
-    document.getElementById("customerList") ||
-    document.getElementById("customersList");
-
-  if (!box) return;
-
-  const customers = getCustomers();
-
-  if (!customers.length) {
-    box.innerHTML =
-      '<div class="empty">No customers yet.</div>';
-    return;
-  }
-
-  box.innerHTML = customers
-    .map(function (customer) {
-      return `
-        <div class="history-card">
-
-          <h3>
-            👤 ${escapeHTML(customer.name)}
-          </h3>
-
-          <p>
-            Phone:
-            ${escapeHTML(customer.phone)}
-          </p>
-
-          <p>
-            Purchases:
-            ${customer.purchases}
-          </p>
-
-          <p>
-            Total spent:
-            <strong>${money(customer.spent)}</strong>
-          </p>
-
-        </div>
-      `;
-    })
-    .join("");
-}
-
-/* =========================================================
-   SALES
-   ========================================================= */
-
-function renderSales() {
-  const box =
-    document.getElementById("salesHistory") ||
-    document.getElementById("salesList");
-
-  if (!box) return;
-
-  if (!sales.length) {
-    box.innerHTML =
-      '<div class="empty">No sales yet.</div>';
-    return;
-  }
-
-  box.innerHTML = sales
-    .map(function (sale) {
-      const profit =
-        sale.profit !== undefined
-          ? Number(sale.profit)
-          : 0;
-
-      return `
-        <div class="history-card">
-
-          <strong>
-            🧾 Sale #${sale.id}
-          </strong>
-
-          <p>
-            ${new Date(sale.date).toLocaleString()}
-          </p>
-
-          <p>
-            Customer:
-            ${escapeHTML(
-              sale.customerName || "Walk-in Customer"
-            )}
-          </p>
-
-          <p>
-            Payment:
-            ${escapeHTML(
-              sale.paymentMethod || "Cash"
-            )}
-          </p>
-
-          <p>
-            Total:
-            <strong>${money(sale.total)}</strong>
-          </p>
-
-          <p>
-            Profit:
-            <strong>${money(profit)}</strong>
-          </p>
-
-        </div>
-      `;
-    })
-    .join("");
-}
-
-/* =========================================================
-   EXPENSES
-   ========================================================= */
-
-window.addExpense = function () {
-  const category =
-    getValue("expenseCategory") || "Other";
-
-  const amount =
-    Number(getValue("expenseAmount") || 0);
-
-  const notes =
-    getValue("expenseNotes");
-
-  if (amount <= 0) {
-    alert("Enter a valid expense amount.");
-    return;
-  }
-
-  expenses.unshift({
-    id: Date.now(),
-    category,
-    amount,
-    notes,
-    date: new Date().toISOString()
-  });
-
-  saveData();
-
-  clearInput("expenseAmount");
-  clearInput("expenseNotes");
-
-  renderExpenses();
-  renderDashboard();
-  renderReports();
-};
-
-window.deleteExpense = function (index) {
-  if (!expenses[index]) return;
-
-  if (!confirm("Delete this expense?")) {
-    return;
-  }
-
-  expenses.splice(index, 1);
-
-  saveData();
-
-  renderExpenses();
-  renderDashboard();
-  renderReports();
-};
-
-function renderExpenses() {
-  const box =
-    document.getElementById("expenseList") ||
-    document.getElementById("expensesList");
-
-  if (!box) return;
-
-  if (!expenses.length) {
-    box.innerHTML =
-      '<div class="empty">No expenses recorded.</div>';
-    return;
-  }
-
-  box.innerHTML = expenses
-    .map(function (expense, index) {
-      return `
-        <div class="history-card">
-
-          <strong>
-            ${escapeHTML(expense.category)}
-          </strong>
-
-          <p>
-            ${money(expense.amount)}
-          </p>
-
-          <small>
-            ${new Date(
-              expense.date
-            ).toLocaleString()}
-          </small>
-
-          ${
-            expense.notes
-              ? `<p>${escapeHTML(expense.notes)}</p>`
-              : ""
-          }
-
-          <button
-            type="button"
-            onclick="deleteExpense(${index})"
-          >
-            🗑 Delete
-          </button>
-
-        </div>
-      `;
-    })
-    .join("");
-}
-
-/* =========================================================
-   DASHBOARD
-   ========================================================= */
-
-function renderDashboard() {
-  const revenue = getRevenue();
-  const grossProfit = getGrossProfit();
-  const expensesTotal = getExpenseTotal();
-  const netProfit = getNetProfit();
-
-  setText(
-    ["revenue", "totalRevenue", "dashboardRevenue"],
-    money(revenue)
-  );
-
-  setText(
-    ["grossProfit", "dashboardGrossProfit"],
-    money(grossProfit)
-  );
-
-  setText(
-    ["expenses", "expenseTotal", "dashboardExpenses"],
-    money(expensesTotal)
-  );
-
-  setText(
-    ["netProfit", "dashboardNetProfit"],
-    money(netProfit)
-  );
-
-  setText(
-    ["transactionCount", "transactionsCount"],
-    sales.length
-  );
-
-  setText(
-    ["productCount", "productsCount"],
-    products.length
-  );
-
-  const lowStockCount = products.filter(function (p) {
-    return (
-      Number(p.stock) <=
-      Number(p.lowStock || 5)
-    );
-  }).length;
-
-  setText(
-    ["lowStock", "lowStockCount"],
-    lowStockCount
-  );
-
-  setText(
-    ["customerCount", "customersCount"],
-    getCustomers().length
-  );
-
-  renderRecentSales();
-}
-
-function renderRecentSales() {
-  const box =
-    document.getElementById("recentSales");
-
-  if (!box) return;
-
-  const recent = sales.slice(0, 5);
-
-  if (!recent.length) {
-    box.innerHTML =
-      '<div class="empty">No recent sales.</div>';
-    return;
-  }
-
-  box.innerHTML = recent
-    .map(function (sale) {
-      return `
-        <div class="history-card">
-
-          <strong>
-            ${escapeHTML(
-              sale.customerName ||
-                "Walk-in Customer"
-            )}
-          </strong>
-
-          <span>
-            ${money(sale.total)}
-          </span>
-
-          <small>
-            ${new Date(
-              sale.date
-            ).toLocaleString()}
-          </small>
-
-        </div>
-      `;
-    })
-    .join("");
-}
-
-/* =========================================================
-   REPORTS
-   ========================================================= */
-
-function renderReports() {
-  setText(
-    ["reportRevenue"],
-    money(getRevenue())
-  );
-
-  setText(
-    ["reportCost"],
-    money(getCost())
-  );
-
-  setText(
-    ["reportGrossProfit"],
-    money(getGrossProfit())
-  );
-
-  setText(
-    ["reportExpenses"],
-    money(getExpenseTotal())
-  );
-
-  setText(
-    ["reportNetProfit"],
-    money(getNetProfit())
-  );
-
-  const bestSellerBox =
-    document.getElementById("bestSellingProducts");
-
-  if (!bestSellerBox) return;
-
-  const counts = {};
-
-  sales.forEach(function (sale) {
-    (sale.items || []).forEach(function (item) {
-      counts[item.name] =
-        (counts[item.name] || 0) +
-        Number(item.quantity || 0);
+    const customerName =
+      document.getElementById("customerName")
+        ?.value.trim();
+
+    const customerPhone =
+      document.getElementById("customerPhone")
+        ?.value.trim();
+
+    if (!customerName) {
+      alert("Please enter customer name.");
+      return;
+    }
+
+    if (!customerPhone) {
+      alert("Please enter customer phone.");
+      return;
+    }
+
+    const total =
+      getCartTotal();
+
+    const paid =
+      Number(
+        document.getElementById("amountPaid")?.value || 0
+      );
+
+    if (paid < total) {
+      alert(
+        "Amount paid is not enough.\n\n" +
+        "Total: " + money(total)
+      );
+      return;
+    }
+
+    const paymentMethod =
+      document.getElementById("paymentMethod")
+        ?.value || "Cash";
+
+    const change =
+      paid - total;
+
+    const saleItems =
+      cart.map(function(item) {
+
+        return {
+          productId: item.productId,
+          name: item.name,
+          price: Number(item.price),
+          costPrice: Number(item.costPrice || 0),
+          quantity: Number(item.quantity),
+          type: item.type,
+          discount: Number(item.discount || 0)
+        };
+
+      });
+
+    /* REDUCE STOCK */
+
+    cart.forEach(function(item) {
+
+      const product =
+        products.find(function(p) {
+          return p.id === item.productId;
+        });
+
+      if (product) {
+
+        product.stock =
+          Math.max(
+            0,
+            Number(product.stock) -
+            Number(item.quantity)
+          );
+      }
     });
+
+    const sale = {
+
+      id: Date.now(),
+
+      date:
+        new Date().toISOString(),
+
+      customerName:
+        customerName,
+
+      customerPhone:
+        customerPhone,
+
+      paymentMethod:
+        paymentMethod,
+
+      items:
+        saleItems,
+
+      subtotal:
+        getCartSubtotal(),
+
+      discount:
+        getCartDiscount(),
+
+      total:
+        total,
+
+      cost:
+        saleItems.reduce(function(sum, item) {
+          return sum +
+            Number(item.costPrice) *
+            Number(item.quantity);
+        }, 0),
+
+      paid:
+        paid,
+
+      change:
+        change
+    };
+
+    sales.unshift(sale);
+
+    saveAllData();
+
+    showReceipt(sale);
+
+    cart = [];
+
+    document.getElementById("customerName").value = "";
+    document.getElementById("customerPhone").value = "";
+    document.getElementById("amountPaid").value = "";
+
+    renderCart();
+    showProducts();
+    renderSaleProducts();
+    renderDashboard();
+    showSalesHistory();
+    showTodaySales();
+    showExpenses();
+    renderReports();
+
+    alert("✅ Sale completed successfully.");
   });
-
-  const best = Object.entries(counts)
-    .sort(function (a, b) {
-      return b[1] - a[1];
-    })
-    .slice(0, 5);
-
-  if (!best.length) {
-    bestSellerBox.innerHTML =
-      '<div class="empty">No sales data yet.</div>';
-    return;
-  }
-
-  bestSellerBox.innerHTML = best
-    .map(function (item) {
-      return `
-        <div class="history-card">
-          <strong>
-            ${escapeHTML(item[0])}
-          </strong>
-
-          <span>
-            ${item[1]} sold
-          </span>
-        </div>
-      `;
-    })
-    .join("");
 }
+
 
 /* =========================================================
    RECEIPT
-   ========================================================= */
+========================================================= */
 
 function showReceipt(sale) {
+
   const receipt =
     document.getElementById("receipt");
 
   if (!receipt) return;
 
-  const items = (sale.items || [])
-    .map(function (item) {
-      return `
-        <div class="receipt-line">
-          <span>
-            ${escapeHTML(item.name)}
-            × ${item.quantity}
-          </span>
+  let itemsHTML = "";
 
-          <strong>
-            ${money(
-              Number(item.price) *
-                Number(item.quantity)
-            )}
-          </strong>
-        </div>
-      `;
-    })
-    .join("");
+  sale.items.forEach(function(item) {
+
+    itemsHTML += `
+      <div class="receipt-line">
+
+        <span>
+          ${escapeHTML(item.name)}
+          × ${item.quantity}
+        </span>
+
+        <span>
+          ${money(
+            item.price * item.quantity -
+            Number(item.discount || 0)
+          )}
+        </span>
+
+      </div>
+    `;
+  });
 
   receipt.innerHTML = `
+
     <h2>
       ${escapeHTML(
         storeSettings.storeName || "My Store"
@@ -1169,86 +1235,111 @@ function showReceipt(sale) {
     </h2>
 
     ${
+      storeSettings.ownerName
+        ? `<p>${escapeHTML(storeSettings.ownerName)}</p>`
+        : ""
+    }
+
+    ${
       storeSettings.address
-        ? `<p>${escapeHTML(
-            storeSettings.address
-          )}</p>`
+        ? `<p>${escapeHTML(storeSettings.address)}</p>`
+        : ""
+    }
+
+    ${
+      storeSettings.city
+        ? `<p>${escapeHTML(storeSettings.city)}</p>`
         : ""
     }
 
     ${
       storeSettings.phone
-        ? `<p>${escapeHTML(
-            storeSettings.phone
-          )}</p>`
+        ? `<p>${escapeHTML(storeSettings.phone)}</p>`
         : ""
     }
 
+    <p><strong>SALES RECEIPT</strong></p>
+
     <hr>
 
-    <strong>SALES RECEIPT</strong>
-
     <p>
-      Customer:
-      ${escapeHTML(
-        sale.customerName || "Walk-in Customer"
-      )}
+      <strong>Customer:</strong>
+      ${escapeHTML(sale.customerName)}
     </p>
 
     <p>
-      Payment:
-      ${escapeHTML(
-        sale.paymentMethod || "Cash"
-      )}
+      <strong>Phone:</strong>
+      ${escapeHTML(sale.customerPhone)}
     </p>
 
     <p>
+      <strong>Payment:</strong>
+      ${escapeHTML(sale.paymentMethod)}
+    </p>
+
+    <p>
+      <strong>Date:</strong>
       ${new Date(sale.date).toLocaleString()}
     </p>
 
     <hr>
 
-    ${items}
+    ${itemsHTML}
 
     <hr>
 
     <div class="receipt-line">
-      <strong>TOTAL</strong>
+      <span>Subtotal</span>
+      <strong>${money(sale.subtotal)}</strong>
+    </div>
+
+    <div class="receipt-line">
+      <span>Discount</span>
+      <strong>${money(sale.discount)}</strong>
+    </div>
+
+    <div class="receipt-line">
+      <span>TOTAL</span>
       <strong>${money(sale.total)}</strong>
     </div>
 
     <div class="receipt-line">
       <span>PAID</span>
-      <span>${money(sale.paid)}</span>
+      <strong>${money(sale.paid)}</strong>
     </div>
 
     <div class="receipt-line">
       <span>CHANGE</span>
-      <span>${money(sale.change)}</span>
+      <strong>${money(sale.change)}</strong>
     </div>
 
     <p>
-      Thank you for shopping with us ❤️
+      ${escapeHTML(
+        storeSettings.receiptFooter ||
+        "Thank you for shopping with us!"
+      )}
     </p>
 
     <button
-      type="button"
+      class="primary-action"
       onclick="printReceipt()"
     >
-      🖨 Print Receipt
+      🖨️ Print Receipt
     </button>
   `;
 
   receipt.style.display = "block";
 }
 
-window.printReceipt = function () {
+window.printReceipt = function() {
+
   const receipt =
     document.getElementById("receipt");
 
   if (!receipt) return;
 
-  const printWindow = window.open("", "_blank");
+  const printWindow =
+    window.open("", "_blank");
 
   if (!printWindow) {
     alert("Please allow pop-ups to print.");
@@ -1256,7 +1347,6 @@ window.printReceipt = function () {
   }
 
   printWindow.document.write(`
-    <!DOCTYPE html>
     <html>
     <head>
       <title>Receipt</title>
@@ -1271,19 +1361,19 @@ window.printReceipt = function () {
         }
 
         .receipt-line {
-          display: flex;
-          justify-content: space-between;
-          gap: 15px;
-          margin: 10px 0;
+          display:flex;
+          justify-content:space-between;
+          margin:8px 0;
+          gap:20px;
         }
 
         button {
-          display: none !important;
+          display:none !important;
         }
 
         h2,
         p {
-          text-align: center;
+          text-align:center;
         }
       </style>
     </head>
@@ -1291,287 +1381,927 @@ window.printReceipt = function () {
     <body>
       ${receipt.innerHTML}
     </body>
+
     </html>
   `);
 
   printWindow.document.close();
 
-  setTimeout(function () {
+  setTimeout(function() {
     printWindow.print();
   }, 300);
 };
 
+
 /* =========================================================
-   SETTINGS
-   ========================================================= */
+   CUSTOMER HISTORY
+========================================================= */
 
-function loadSettingsForm() {
-  setValue("storeName", storeSettings.storeName);
-  setValue("ownerName", storeSettings.ownerName);
-  setValue("storePhone", storeSettings.phone);
-  setValue("storeEmail", storeSettings.email);
-  setValue("storeAddress", storeSettings.address);
-  setValue("storeCity", storeSettings.city);
+function setupCustomerSearch() {
 
-  updateStoreTitle();
+  const input =
+    document.getElementById("customerSearch");
+
+  if (!input) return;
+
+  input.addEventListener("input", showCustomerHistory);
 }
 
-function saveSettings() {
-  const name =
-    getValue("storeName").trim();
+function showCustomerHistory() {
 
-  if (!name) {
-    alert("Please enter your store name.");
+  const box =
+    document.getElementById("customerHistory");
+
+  const input =
+    document.getElementById("customerSearch");
+
+  if (!box || !input) return;
+
+  const search =
+    input.value.trim().toLowerCase();
+
+  if (!search) {
+
+    box.innerHTML =
+      '<p class="empty">Search for a customer to view history.</p>';
+
     return;
   }
 
-  storeSettings = {
-    ...storeSettings,
+  const found =
+    sales.filter(function(sale) {
 
-    storeName: name,
-    ownerName: getValue("ownerName").trim(),
-    phone: getValue("storePhone").trim(),
-    email: getValue("storeEmail").trim(),
-    address: getValue("storeAddress").trim(),
-    city: getValue("storeCity").trim()
-  };
+      return (
+        String(sale.customerName || "")
+          .toLowerCase()
+          .includes(search) ||
 
-  saveStoreSettings();
-  updateStoreTitle();
+        String(sale.customerPhone || "")
+          .toLowerCase()
+          .includes(search)
+      );
+    });
 
-  alert("✅ Business information saved.");
-}
+  if (found.length === 0) {
 
-function updateStoreTitle() {
-  const title =
-    document.getElementById("appStoreName");
+    box.innerHTML =
+      '<p class="empty">No customer history found.</p>';
 
-  const letter =
-    document.getElementById("profileLetter");
-
-  const name =
-    storeSettings.storeName || "My Store";
-
-  if (title) {
-    title.textContent = name;
+    return;
   }
 
-  if (letter) {
-    letter.textContent =
-      name.charAt(0).toUpperCase();
-  }
+  const totalSpent =
+    found.reduce(function(total, sale) {
+      return total + Number(sale.total || 0);
+    }, 0);
 
-  document.title = name + " POS";
+  let html = `
+
+    <div class="history-card">
+
+      <h3>
+        👤 ${escapeHTML(found[0].customerName)}
+      </h3>
+
+      <p>
+        Phone:
+        ${escapeHTML(found[0].customerPhone)}
+      </p>
+
+      <p>
+        Purchases:
+        <strong>${found.length}</strong>
+      </p>
+
+      <p>
+        Total Spent:
+        <strong>${money(totalSpent)}</strong>
+      </p>
+
+    </div>
+  `;
+
+  found.forEach(function(sale) {
+
+    html += `
+
+      <div class="history-card">
+
+        <strong>
+          🧾 ${new Date(sale.date).toLocaleString()}
+        </strong>
+
+        <br><br>
+
+        ${sale.items.map(function(item) {
+          return `
+            ${escapeHTML(item.name)}
+            × ${item.quantity}
+            — ${money(
+              item.price * item.quantity
+            )}
+            <br>
+          `;
+        }).join("")}
+
+        <br>
+
+        <strong>
+          Total: ${money(sale.total)}
+        </strong>
+
+        <br>
+
+        Payment:
+        ${escapeHTML(sale.paymentMethod)}
+
+      </div>
+    `;
+  });
+
+  box.innerHTML = html;
 }
+
 
 /* =========================================================
-   BACKUP / RESTORE
-   ========================================================= */
+   SALES HISTORY
+========================================================= */
 
-window.backupData = function () {
-  const backup = {
-    version: 2,
-    exportedAt: new Date().toISOString(),
-    products,
-    sales,
-    expenses,
-    storeSettings
-  };
+function showSalesHistory() {
 
-  const blob = new Blob(
-    [JSON.stringify(backup, null, 2)],
-    { type: "application/json" }
-  );
+  const box =
+    document.getElementById("salesHistory");
 
-  const url = URL.createObjectURL(blob);
+  if (!box) return;
 
-  const link = document.createElement("a");
+  if (sales.length === 0) {
 
-  link.href = url;
-  link.download = "my-store-pos-backup.json";
+    box.innerHTML =
+      '<p class="empty">No sales yet.</p>';
 
-  link.click();
+    return;
+  }
 
-  URL.revokeObjectURL(url);
-};
+  box.innerHTML =
+    sales.map(function(sale) {
 
-window.restoreData = function (file) {
-  if (!file) return;
+      return `
 
-  const reader = new FileReader();
+        <div class="history-card">
 
-  reader.onload = function (event) {
-    try {
-      const backup = JSON.parse(
-        event.target.result
+          <strong>
+            🧾 Sale —
+            ${new Date(sale.date).toLocaleString()}
+          </strong>
+
+          <br><br>
+
+          Customer:
+          ${escapeHTML(sale.customerName)}
+
+          <br>
+
+          Phone:
+          ${escapeHTML(sale.customerPhone)}
+
+          <br>
+
+          Payment:
+          ${escapeHTML(sale.paymentMethod)}
+
+          <br><br>
+
+          ${sale.items.map(function(item) {
+            return `
+              ${escapeHTML(item.name)}
+              × ${item.quantity}
+              — ${money(
+                item.price * item.quantity
+              )}
+              <br>
+            `;
+          }).join("")}
+
+          <br>
+
+          <strong>
+            Total: ${money(sale.total)}
+          </strong>
+
+          <br>
+
+          Cost:
+          ${money(getSaleCost(sale))}
+
+          <br>
+
+          Profit:
+          ${money(getSaleProfit(sale))}
+
+          <br>
+
+          Paid:
+          ${money(sale.paid)}
+
+          <br>
+
+          Change:
+          ${money(sale.change)}
+
+        </div>
+      `;
+
+    }).join("");
+
+  const count =
+    document.getElementById("salesTransactionCount");
+
+  if (count) {
+    count.textContent = sales.length;
+  }
+}
+
+function showTodaySales() {
+
+  const total =
+    getTodayRevenue();
+
+  const element =
+    document.getElementById("salesTotal");
+
+  if (element) {
+    element.textContent =
+      money(total);
+  }
+
+  const count =
+    document.getElementById("salesTransactionCount");
+
+  if (count) {
+    count.textContent =
+      sales.length;
+  }
+}
+
+
+/* =========================================================
+   EXPENSES
+========================================================= */
+
+function setupExpenseForm() {
+
+  const button =
+    document.getElementById("addExpenseButton");
+
+  if (!button) return;
+
+  button.addEventListener("click", function() {
+
+    const name =
+      document.getElementById("expenseName")
+        ?.value.trim();
+
+    const category =
+      document.getElementById("expenseCategory")
+        ?.value;
+
+    const amount =
+      Number(
+        document.getElementById("expenseAmount")
+          ?.value
       );
 
-      if (!backup || !backup.version) {
-        throw new Error("Invalid backup");
-      }
+    const date =
+      document.getElementById("expenseDate")
+        ?.value;
 
-      products = Array.isArray(backup.products)
-        ? backup.products
-        : [];
+    const notes =
+      document.getElementById("expenseNotes")
+        ?.value.trim();
 
-      sales = Array.isArray(backup.sales)
-        ? backup.sales
-        : [];
-
-      expenses = Array.isArray(backup.expenses)
-        ? backup.expenses
-        : [];
-
-      storeSettings = {
-        ...storeSettings,
-        ...(backup.storeSettings || {})
-      };
-
-      saveData();
-      saveStoreSettings();
-
-      location.reload();
-    } catch (error) {
-      alert("Invalid backup file.");
-      console.error(error);
+    if (!name) {
+      alert("Enter expense description.");
+      return;
     }
-  };
 
-  reader.readAsText(file);
-};
+    if (!amount || amount <= 0) {
+      alert("Enter a valid expense amount.");
+      return;
+    }
 
-/* =========================================================
-   SEARCH
-   ========================================================= */
+    if (!date) {
+      alert("Select expense date.");
+      return;
+    }
 
-function setupSearch() {
-  const searches = [
-    "productSearch",
-    "inventorySearch",
-    "homeProductSearch"
-  ];
+    expenses.unshift({
 
-  searches.forEach(function (id) {
-    const input =
-      document.getElementById(id);
+      id: Date.now(),
 
-    if (!input) return;
+      name: name,
 
-    input.addEventListener(
-      "input",
-      function () {
-        if (
-          id === "inventorySearch"
-        ) {
-          renderInventory();
-        } else {
-          renderPOSProducts();
-        }
-      }
-    );
+      category:
+        category || "Other",
+
+      amount: amount,
+
+      date: date,
+
+      notes: notes,
+
+      createdAt:
+        new Date().toISOString()
+    });
+
+    saveAllData();
+
+    document.getElementById("expenseName").value = "";
+    document.getElementById("expenseCategory").value = "";
+    document.getElementById("expenseAmount").value = "";
+    document.getElementById("expenseDate").value = "";
+    document.getElementById("expenseNotes").value = "";
+
+    showExpenses();
+    renderDashboard();
+    renderReports();
+
+    alert("✅ Expense added.");
   });
 }
 
-/* =========================================================
-   GENERIC HELPERS
-   ========================================================= */
+function showExpenses() {
 
-function getValue(id) {
-  const element =
-    document.getElementById(id);
+  const box =
+    document.getElementById("expenseList");
 
-  return element
-    ? element.value
-    : "";
-}
+  if (!box) return;
 
-function setValue(id, value) {
-  const element =
-    document.getElementById(id);
+  if (expenses.length === 0) {
 
-  if (element) {
-    element.value = value || "";
+    box.innerHTML =
+      '<p class="empty">No expenses recorded.</p>';
+
+  } else {
+
+    box.innerHTML =
+      expenses.map(function(expense, index) {
+
+        return `
+
+          <div class="history-card">
+
+            <div style="
+              display:flex;
+              justify-content:space-between;
+              gap:15px;
+            ">
+
+              <strong>
+                ${escapeHTML(expense.name)}
+              </strong>
+
+              <strong>
+                ${money(expense.amount)}
+              </strong>
+
+            </div>
+
+            <small>
+              ${escapeHTML(expense.category)}
+              • ${escapeHTML(expense.date)}
+            </small>
+
+            ${
+              expense.notes
+                ? `<p>${escapeHTML(expense.notes)}</p>`
+                : ""
+            }
+
+            <button
+              onclick="deleteExpense(${index})"
+              style="
+                background:#dc2626;
+                color:white;
+                border:0;
+                padding:7px 10px;
+                border-radius:7px;
+                cursor:pointer;
+              "
+            >
+              Delete
+            </button>
+
+          </div>
+        `;
+
+      }).join("");
+  }
+
+  const total =
+    expenses.reduce(function(sum, expense) {
+      return sum + Number(expense.amount || 0);
+    }, 0);
+
+  const totalBox =
+    document.getElementById("totalExpenses");
+
+  if (totalBox) {
+    totalBox.textContent =
+      money(total);
   }
 }
 
-function clearInput(id) {
-  setValue(id, "");
-}
+window.deleteExpense = function(index) {
 
-function setText(ids, value) {
-  ids.forEach(function (id) {
+  if (!expenses[index]) return;
+
+  if (!confirm("Delete this expense?")) {
+    return;
+  }
+
+  expenses.splice(index, 1);
+
+  saveAllData();
+
+  showExpenses();
+  renderDashboard();
+  renderReports();
+};
+
+
+/* =========================================================
+   DASHBOARD
+========================================================= */
+
+function renderDashboard() {
+
+  const revenue =
+    getTodayRevenue();
+
+  const cost =
+    getTodayCost();
+
+  const grossProfit =
+    revenue - cost;
+
+  const expensesToday =
+    getTodayExpenses();
+
+  const netProfit =
+    grossProfit - expensesToday;
+
+  const values = {
+
+    revenueStat:
+      money(revenue),
+
+    grossProfitStat:
+      money(grossProfit),
+
+    expenseStat:
+      money(expensesToday),
+
+    netProfitStat:
+      money(netProfit),
+
+    transactionCount:
+      sales.length,
+
+    productCount:
+      products.length,
+
+    lowStock:
+      products.filter(function(product) {
+        return Number(product.stock) <= 5;
+      }).length
+  };
+
+  Object.keys(values).forEach(function(id) {
+
     const element =
       document.getElementById(id);
 
     if (element) {
-      element.textContent = value;
+      element.textContent =
+        values[id];
     }
   });
+
+  renderRecentSales();
 }
+
+function renderRecentSales() {
+
+  const box =
+    document.getElementById("recentSales");
+
+  if (!box) return;
+
+  const recent =
+    sales.slice(0, 5);
+
+  if (recent.length === 0) {
+
+    box.innerHTML =
+      '<p class="empty">No sales yet.</p>';
+
+    return;
+  }
+
+  box.innerHTML =
+    recent.map(function(sale) {
+
+      return `
+
+        <div class="history-card">
+
+          <div style="
+            display:flex;
+            justify-content:space-between;
+            gap:15px;
+          ">
+
+            <strong>
+              ${escapeHTML(sale.customerName)}
+            </strong>
+
+            <strong>
+              ${money(sale.total)}
+            </strong>
+
+          </div>
+
+          <small>
+            ${new Date(sale.date).toLocaleString()}
+            • ${escapeHTML(sale.paymentMethod)}
+          </small>
+
+        </div>
+      `;
+
+    }).join("");
+}
+
 
 /* =========================================================
-   SERVICE WORKER
-   ========================================================= */
+   REPORTS
+========================================================= */
 
-if ("serviceWorker" in navigator) {
-  window.addEventListener(
-    "load",
-    function () {
-      navigator.serviceWorker
-        .register("./sw.js")
-        .then(function (registration) {
-          console.log(
-            "Service Worker registered:",
-            registration.scope
-          );
-        })
-        .catch(function (error) {
-          console.error(
-            "Service Worker registration failed:",
-            error
-          );
-        });
+function renderReports() {
+
+  const revenue =
+    sales.reduce(function(sum, sale) {
+      return sum + Number(sale.total || 0);
+    }, 0);
+
+  const cost =
+    sales.reduce(function(sum, sale) {
+      return sum + getSaleCost(sale);
+    }, 0);
+
+  const grossProfit =
+    revenue - cost;
+
+  const totalExpense =
+    expenses.reduce(function(sum, expense) {
+      return sum + Number(expense.amount || 0);
+    }, 0);
+
+  const netProfit =
+    grossProfit - totalExpense;
+
+  const values = {
+
+    reportRevenue:
+      money(revenue),
+
+    reportCost:
+      money(cost),
+
+    reportGrossProfit:
+      money(grossProfit),
+
+    reportExpenses:
+      money(totalExpense),
+
+    reportNetProfit:
+      money(netProfit)
+  };
+
+  Object.keys(values).forEach(function(id) {
+
+    const element =
+      document.getElementById(id);
+
+    if (element) {
+      element.textContent =
+        values[id];
     }
-  );
+  });
+
+  renderBestSellingProducts();
 }
+
+function renderBestSellingProducts() {
+
+  const box =
+    document.getElementById("bestSellingProducts");
+
+  if (!box) return;
+
+  const totals = {};
+
+  sales.forEach(function(sale) {
+
+    sale.items.forEach(function(item) {
+
+      if (!totals[item.name]) {
+        totals[item.name] = 0;
+      }
+
+      totals[item.name] +=
+        Number(item.quantity || 0);
+    });
+
+  });
+
+  const ranking =
+    Object.entries(totals)
+      .sort(function(a, b) {
+        return b[1] - a[1];
+      });
+
+  if (ranking.length === 0) {
+
+    box.innerHTML =
+      '<p class="empty">No sales data yet.</p>';
+
+    return;
+  }
+
+  box.innerHTML =
+    ranking.slice(0, 10)
+      .map(function(item, index) {
+
+        return `
+
+          <div class="history-card">
+
+            <strong>
+              #${index + 1}
+              ${escapeHTML(item[0])}
+            </strong>
+
+            <span>
+              ${item[1]} units sold
+            </span>
+
+          </div>
+        `;
+
+      }).join("");
+}
+
+
+/* =========================================================
+   BACKUP / RESTORE
+========================================================= */
+
+function setupBackup() {
+
+  const exportButton =
+    document.getElementById("exportDataButton");
+
+  const importInput =
+    document.getElementById("importDataInput");
+
+  if (exportButton) {
+
+    exportButton.addEventListener("click", function() {
+
+      const backup = {
+
+        version: 2,
+
+        exportedAt:
+          new Date().toISOString(),
+
+        products:
+          products,
+
+        sales:
+          sales,
+
+        expenses:
+          expenses,
+
+        storeSettings:
+          storeSettings
+      };
+
+      const blob =
+        new Blob(
+          [JSON.stringify(backup, null, 2)],
+          {
+            type: "application/json"
+          }
+        );
+
+      const url =
+        URL.createObjectURL(blob);
+
+      const link =
+        document.createElement("a");
+
+      link.href = url;
+
+      link.download =
+        "my-store-pos-backup.json";
+
+      document.body.appendChild(link);
+
+      link.click();
+
+      link.remove();
+
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  if (importInput) {
+
+    importInput.addEventListener("change", function(event) {
+
+      const file =
+        event.target.files[0];
+
+      if (!file) return;
+
+      const reader =
+        new FileReader();
+
+      reader.onload = function(e) {
+
+        try {
+
+          const backup =
+            JSON.parse(e.target.result);
+
+          if (!backup || typeof backup !== "object") {
+            throw new Error("Invalid backup.");
+          }
+
+          products =
+            Array.isArray(backup.products)
+              ? backup.products
+              : [];
+
+          sales =
+            Array.isArray(backup.sales)
+              ? backup.sales
+              : [];
+
+          expenses =
+            Array.isArray(backup.expenses)
+              ? backup.expenses
+              : [];
+
+          if (backup.storeSettings) {
+
+            storeSettings = {
+              ...storeSettings,
+              ...backup.storeSettings
+            };
+          }
+
+          cart = [];
+
+          saveAllData();
+
+          loadStoreSettings();
+
+          showProducts();
+          renderSaleProducts();
+          renderCart();
+          showSalesHistory();
+          showTodaySales();
+          showExpenses();
+          renderDashboard();
+          renderReports();
+
+          alert("✅ Backup restored successfully.");
+
+        } catch (error) {
+
+          console.error(error);
+
+          alert(
+            "❌ This backup file is not valid."
+          );
+        }
+
+        event.target.value = "";
+      };
+
+      reader.readAsText(file);
+    });
+  }
+}
+
+
+/* =========================================================
+   SEARCH
+========================================================= */
+
+function setupSearch() {
+
+  const productSearch =
+    document.getElementById("productSearch");
+
+  const saleType =
+    document.getElementById("saleType");
+
+  const inventorySearch =
+    document.getElementById("inventorySearch");
+
+  if (productSearch) {
+    productSearch.addEventListener(
+      "input",
+      renderSaleProducts
+    );
+  }
+
+  if (saleType) {
+    saleType.addEventListener(
+      "change",
+      renderSaleProducts
+    );
+  }
+
+  if (inventorySearch) {
+
+    inventorySearch.addEventListener(
+      "input",
+      function() {
+
+        const query =
+          inventorySearch.value
+            .trim()
+            .toLowerCase();
+
+        const filtered =
+          products.filter(function(product) {
+
+            return (
+              product.name
+                .toLowerCase()
+                .includes(query) ||
+
+              String(product.sku || "")
+                .toLowerCase()
+                .includes(query) ||
+
+              String(product.category || "")
+                .toLowerCase()
+                .includes(query)
+            );
+          });
+
+        showProducts(filtered);
+      }
+    );
+  }
+}
+
 
 /* =========================================================
    INITIALIZE
-   ========================================================= */
+========================================================= */
 
 document.addEventListener(
   "DOMContentLoaded",
-  function () {
-    loadSettingsForm();
+  function() {
+
+    loadAllData();
+
+    loadStoreSettings();
+
+    setupSettings();
+
+    setupProductForm();
+
+    setupCompleteSale();
+
+    setupExpenseForm();
+
+    setupCustomerSearch();
+
+    setupBackup();
 
     setupSearch();
 
-    renderInventory();
-    renderPOSProducts();
-    renderCart();
-
-    renderDashboard();
-    renderCustomers();
-    renderSales();
-    renderExpenses();
-    renderReports();
-
-    const saveButton =
-      document.getElementById(
-        "saveStoreButton"
-      );
-
-    if (saveButton) {
-      saveButton.addEventListener(
-        "click",
-        saveSettings
-      );
-    }
-
     const amountPaid =
-      document.getElementById(
-        "amountPaid"
-      );
+      document.getElementById("amountPaid");
 
     if (amountPaid) {
       amountPaid.addEventListener(
@@ -1580,62 +2310,74 @@ document.addEventListener(
       );
     }
 
-    const addExpenseButton =
-      document.getElementById(
-        "addExpenseButton"
-      );
+    const defaultSaleType =
+      document.getElementById("defaultSaleType");
 
-    if (addExpenseButton) {
-      addExpenseButton.addEventListener(
-        "click",
-        window.addExpense
-      );
-    }
+    if (defaultSaleType) {
 
-    const addProductButton =
-      document.getElementById(
-        "addProductButton"
-      );
+      defaultSaleType.addEventListener(
+        "change",
+        function() {
 
-    if (addProductButton) {
-      addProductButton.addEventListener(
-        "click",
-        function () {
-          addProduct({
-            name: getValue("productName"),
-            category:
-              getValue("productCategory"),
-            sku: getValue("productSKU"),
-            costPrice:
-              getValue("productCostPrice"),
-            retailPrice:
-              getValue("productRetailPrice"),
-            wholesalePrice:
-              getValue(
-                "productWholesalePrice"
-              ),
-            stock:
-              getValue("productStock"),
-            lowStock:
-              getValue("productLowStock") || 5
-          });
+          storeSettings.defaultSaleType =
+            defaultSaleType.value;
 
-          clearInput("productName");
-          clearInput("productCategory");
-          clearInput("productSKU");
-          clearInput("productCostPrice");
-          clearInput("productRetailPrice");
-          clearInput(
-            "productWholesalePrice"
-          );
-          clearInput("productStock");
-          clearInput("productLowStock");
+          saveAllData();
         }
       );
     }
 
-    console.log(
-      "My Store POS V2 loaded successfully."
-    );
+    showProducts();
+
+    renderSaleProducts();
+
+    renderCart();
+
+    showSalesHistory();
+
+    showTodaySales();
+
+    showExpenses();
+
+    renderDashboard();
+
+    renderReports();
+
+    /* Set today's date for expenses */
+
+    const expenseDate =
+      document.getElementById("expenseDate");
+
+    if (
+      expenseDate &&
+      !expenseDate.value
+    ) {
+
+      const now =
+        new Date();
+
+      const localDate =
+        new Date(
+          now.getTime() -
+          now.getTimezoneOffset() * 60000
+        )
+        .toISOString()
+        .split("T")[0];
+
+      expenseDate.value =
+        localDate;
+    }
+
+    /* Apply default sale type */
+
+    const saleType =
+      document.getElementById("saleType");
+
+    if (saleType) {
+      saleType.value =
+        storeSettings.defaultSaleType || "retail";
+    }
+
+    console.log("My Store POS V2 loaded successfully.");
   }
 );
