@@ -597,14 +597,13 @@ window.deleteProduct = function(index) {
    ADD PRODUCT BOX
 ========================================================= */
 
-window.showAddProduct = function() {
-
-  const box =
-    document.getElementById("addProductBox");
+window.showAddProduct = function () {
+  const box = document.getElementById("addProductBox");
 
   if (!box) return;
 
   box.classList.toggle("hidden");
+};
 
   if (!box.classList.contains("hidden")) {
     box.scrollIntoView({
