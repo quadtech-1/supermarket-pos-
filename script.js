@@ -602,15 +602,14 @@ window.showAddProduct = function () {
 
   if (!box) return;
 
-  box.classList.toggle("hidden");
-};
+  box.classList.remove("hidden");
 
-  if (!box.classList.contains("hidden")) {
+  setTimeout(function () {
     box.scrollIntoView({
       behavior: "smooth",
       block: "center"
     });
-  }
+  }, 100);
 };
 
 
